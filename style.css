@@ -156,3 +156,12 @@ body {
     padding: 5px 10px;
     border-radius: 3px;
 }
+
+/* Adicione isso ao seu CSS para Debug */
+
+#joystick-zone {
+    /* Adiciona um fundo semi-transparente para que possamos ver a área */
+    background: rgba(0, 255, 255, 0.1);
+    border: 2px dashed cyan;
+    border-radius: 50%;
+}
