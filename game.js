@@ -1,56 +1,53 @@
 const Game = {
-    // Variáveis da cena
+    // Variáveis
     scene: null, camera: null, renderer: null, mapPlane: null,
-    
-    // Variáveis de controle
-    joystick: null,
-    cameraPivot: null, // NOVO: Um "pivô" para rotacionar a câmera
-    cameraMode: 'move', // NOVO: 'move' ou 'rotate'
-    moveDirection: { x: 0, y: 0, z: 0 }, // Eixos para movimento e rotação
-    moveSpeed: 0.5,
-    rotateSpeed: 0.02,
-    
-    // Variáveis do Pinch-to-Zoom
-    pinchStartDistance: 0,
-    zoomSpeed: 0.1,
+    joystick: null, cameraPivot: null, cameraMode: 'move',
+    moveDirection: { x: 0, z: 0 }, moveSpeed: 0.5, rotateSpeed: 0.02,
+    pinchStartDistance: 0, zoomSpeed: 0.1,
+    isInitialized: false, // Flag para não inicializar duas vezes
 
     init: function() {
-        // Configuração da Cena e Renderizador... (igual)
+        if (this.isInitialized) {
+            DebugConsole.error("Game.init() chamado mais de uma vez. Abortando.");
+            return;
+        }
+        DebugConsole.log("Game.init: Iniciando ambiente 3D.");
+
+        // Cena e Renderizador
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87CEEB);
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('game-container').appendChild(this.renderer.domElement);
-        
-        // NOVO: Configuração da Câmera com Pivô
-        this.cameraPivot = new THREE.Object3D(); // O pivô fica no centro
+
+        // Câmera com Pivô
+        this.cameraPivot = new THREE.Object3D();
         this.scene.add(this.cameraPivot);
-        
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 50, 50);
-        this.camera.lookAt(this.cameraPivot.position); // Câmera olha para o pivô
-        this.cameraPivot.add(this.camera); // Anexa a câmera ao pivô
-        
-        // Luzes e Mapa... (igual)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        this.scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(50, 100, 25);
-        this.scene.add(directionalLight);
-        const mapGeometry = new THREE.PlaneGeometry(100, 100, 10, 10);
-        const mapMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-        this.mapPlane = new THREE.Mesh(mapGeometry, mapMaterial);
+        this.camera.lookAt(this.cameraPivot.position);
+        this.cameraPivot.add(this.camera);
+
+        // Luzes e Mapa
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 25);
+        this.scene.add(dirLight);
+        this.mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(100, 100, 10, 10), new THREE.MeshLambertMaterial({ color: 0x228B22 }));
         this.mapPlane.rotation.x = -Math.PI / 2;
         this.scene.add(this.mapPlane);
+        DebugConsole.log("Game.init: Objetos da cena criados.");
 
-        // Configura todos os controles
         this.setupControls();
-        
         this.animate();
         window.addEventListener('resize', () => this.onWindowResize());
+        this.isInitialized = true;
+        DebugConsole.log("Game.init: Finalizado com sucesso.");
     },
     
     setupControls: function() {
+        DebugConsole.log("setupControls: Iniciando configuração de controles.");
+        
         // Joystick
         const joystickZone = document.getElementById('joystick-zone');
         if (joystickZone) {
@@ -59,67 +56,66 @@ const Game = {
              this.joystick.on('move', (evt, data) => {
                  const angle = data.angle.radian;
                  this.moveDirection.x = Math.cos(angle);
-                 this.moveDirection.z = -Math.sin(angle); // Z é negativo para frente
-             });
-             this.joystick.on('end', () => {
+                 this.moveDirection.z = -Math.sin(angle);
+             }).on('end', () => {
                  this.moveDirection.x = 0;
                  this.moveDirection.z = 0;
              });
+             DebugConsole.log("setupControls: Joystick configurado.");
+        } else {
+            DebugConsole.error("setupControls: Zona do joystick ('joystick-zone') não encontrada!");
         }
         
         // Botão de alternar modo
         const modeBtn = document.getElementById('camera-mode-btn');
-        modeBtn.addEventListener('touchstart', (e) => { // Usar touchstart para mobile
-            e.preventDefault();
-            if (this.cameraMode === 'move') {
-                this.cameraMode = 'rotate';
-                modeBtn.textContent = '[Rotar]'; // Peça um ícone de rotação aqui!
-            } else {
-                this.cameraMode = 'move';
-                modeBtn.textContent = '[Mover]'; // Peça um ícone de movimento aqui!
-            }
-        });
+        if (modeBtn) {
+            const toggleMode = (e) => {
+                e.preventDefault();
+                this.cameraMode = (this.cameraMode === 'move') ? 'rotate' : 'move';
+                modeBtn.textContent = this.cameraMode === 'move' ? '[Mover]' : '[Rotar]';
+                DebugConsole.log(`Modo da câmera alterado para: ${this.cameraMode}`);
+            };
+            modeBtn.addEventListener('click', toggleMode);
+            modeBtn.addEventListener('touchstart', toggleMode, { passive: false });
+            DebugConsole.log("setupControls: Botão de modo de câmera configurado.");
+        } else {
+            DebugConsole.error("setupControls: Botão 'camera-mode-btn' não encontrado!");
+        }
 
         // Pinch-to-Zoom
-        window.addEventListener('touchstart', (e) => {
+        const gameCanvas = this.renderer.domElement;
+        gameCanvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
-                this.pinchStartDistance = this.getDistance(e.touches[0], e.touches[1]);
+                e.preventDefault();
+                this.pinchStartDistance = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
             }
-        });
-        window.addEventListener('touchmove', (e) => {
+        }, { passive: false });
+        gameCanvas.addEventListener('touchmove', (e) => {
             if (e.touches.length === 2) {
-                const currentDistance = this.getDistance(e.touches[0], e.touches[1]);
+                e.preventDefault();
+                const currentDistance = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
                 const delta = this.pinchStartDistance - currentDistance;
                 this.camera.translateZ(delta * this.zoomSpeed);
                 this.pinchStartDistance = currentDistance;
             }
-        });
-    },
-    
-    getDistance: function(p1, p2) {
-        return Math.sqrt(Math.pow(p2.pageX - p1.pageX, 2) + Math.pow(p2.pageY - p1.pageY, 2));
+        }, { passive: false });
+        DebugConsole.log("setupControls: Listeners de Pinch-to-Zoom configurados.");
     },
 
     animate: function() {
         requestAnimationFrame(() => this.animate());
-
-        const moveX = this.moveDirection.x * this.moveSpeed;
-        const moveZ = this.moveDirection.z * this.moveSpeed;
-        
+        const moveX = this.moveDirection.x;
+        const moveZ = this.moveDirection.z;
         if (this.cameraMode === 'move') {
-            // Mover o PIVÔ, e a câmera se move junto
-            this.cameraPivot.translateX(moveX);
-            this.cameraPivot.translateZ(moveZ);
-        } else { // Modo 'rotate'
-            // Rotacionar o PIVÔ
-            this.cameraPivot.rotateY(-this.moveDirection.x * this.rotateSpeed);
-            // Rotacionar a câmera para cima e para baixo (com limites)
-            const newRotationX = this.camera.rotation.x - this.moveDirection.z * this.rotateSpeed;
-            if (newRotationX > -1.2 && newRotationX < 1.2) { // Limites para não virar de cabeça pra baixo
+            this.cameraPivot.translateX(moveX * this.moveSpeed);
+            this.cameraPivot.translateZ(moveZ * this.moveSpeed);
+        } else {
+            this.cameraPivot.rotateY(-moveX * this.rotateSpeed);
+            const newRotationX = this.camera.rotation.x - moveZ * this.rotateSpeed;
+            if (newRotationX > -1.2 && newRotationX < 1.2) {
                  this.camera.rotation.x = newRotationX;
             }
         }
-        
         this.renderer.render(this.scene, this.camera);
     },
     
@@ -127,5 +123,6 @@ const Game = {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        DebugConsole.log("Janela redimensionada.");
     }
 };
