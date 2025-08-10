@@ -1,75 +1,67 @@
-// console.js
-
 const DebugConsole = {
     consoleElement: null,
     logContainer: null,
-    toggleButton: null,
-    isVisible: false,
-
-    // 1. Inicializa o console e captura os erros globais
+    
     init: function() {
-        // Pega os elementos do HTML
-        this.toggleButton = document.getElementById('debug-toggle-btn');
+        // Passo 1: Configurar a captura de erros imediatamente.
+        window.onerror = (message, source, lineno, colno, error) => {
+            const fileName = source ? source.split('/').pop() : 'script';
+            const errorMsg = `ERRO: "${message}" em ${fileName} (linha:${lineno})`;
+            this.error(errorMsg);
+            this.toggle(true); // Força a abertura do console em caso de erro
+            return true;
+        };
+        console.log("DebugConsole: Captura de erros global ativada.");
+    },
+    
+    setupUI: function() {
+        // Passo 2: Conectar-se aos elementos do HTML.
         this.consoleElement = document.getElementById('debug-console-container');
         this.logContainer = document.getElementById('debug-log');
+        const toggleButton = document.getElementById('debug-toggle-btn');
         const clearBtn = document.getElementById('debug-clear-btn');
 
-        if (!this.toggleButton || !this.consoleElement) {
-            console.error("Elementos do console de debug não encontrados no HTML!");
+        if (!this.consoleElement || !toggleButton || !clearBtn) {
+            console.error("DebugConsole: Falha ao encontrar elementos da UI do console no HTML.");
             return;
         }
 
-        // Ação para o botão de mostrar/esconder
-        this.toggleButton.addEventListener('click', () => this.toggle());
-        this.toggleButton.addEventListener('touchstart', () => this.toggle());
-
-        // Ação para o botão de limpar
+        toggleButton.addEventListener('click', () => this.toggle());
         clearBtn.addEventListener('click', () => this.clear());
         
-        // **A PARTE MAIS IMPORTANTE: Captura de Erros Globais**
-        // Esta função será chamada automaticamente para qualquer erro não tratado no código
-        window.onerror = (message, source, lineno, colno, error) => {
-            const errorMsg = `ERRO: ${message} em ${source.split('/').pop()} (linha ${lineno})`;
-            this.error(errorMsg);
-            // Mostra o console automaticamente se ocorrer um erro
-            if (!this.isVisible) {
-                this.toggle();
-            }
-            return true; // Impede que o erro apareça no console padrão do navegador
-        };
-        
-        this.log("Console de Debug inicializado.");
+        this.log("UI do Console de Debug inicializada.");
     },
 
-    // 2. Mostra ou esconde o console
-    toggle: function() {
-        this.isVisible = !this.isVisible;
-        this.consoleElement.classList.toggle('hidden', !this.isVisible);
+    toggle: function(forceShow = false) {
+        if (!this.consoleElement) return;
+        if (forceShow) {
+            this.consoleElement.classList.remove('hidden');
+        } else {
+            this.consoleElement.classList.toggle('hidden');
+        }
     },
     
-    // 3. Adiciona uma mensagem de log normal (branca)
     log: function(message) {
+        if (!this.logContainer) return;
         const entry = document.createElement('p');
         entry.className = 'log-entry log-info';
-        entry.innerHTML = `<span>[${new Date().toLocaleTimeString()}]</span> ${message}`;
-        this.logContainer.appendChild(entry);
-        this.logContainer.scrollTop = this.logContainer.scrollHeight; // Rola para o final
-    },
-
-    // 4. Adiciona uma mensagem de erro (vermelha)
-    error: function(message) {
-        const entry = document.createElement('p');
-        entry.className = 'log-entry log-error';
-        entry.innerHTML = `<span>[${new Date().toLocaleTimeString()}]</span> ${message}`;
+        entry.innerHTML = `<span>[INFO]</span> ${message}`;
         this.logContainer.appendChild(entry);
         this.logContainer.scrollTop = this.logContainer.scrollHeight;
     },
 
-    // 5. Limpa todas as mensagens
+    error: function(message) {
+        if (!this.logContainer) return;
+        const entry = document.createElement('p');
+        entry.className = 'log-entry log-error';
+        entry.innerHTML = `<span>[ERRO]</span> ${message}`;
+        this.logContainer.appendChild(entry);
+        this.logContainer.scrollTop = this.logContainer.scrollHeight;
+    },
+
     clear: function() {
+        if (!this.logContainer) return;
         this.logContainer.innerHTML = '';
+        this.log('Console limpo.');
     }
 };
-
-// Inicializa o console assim que o script for carregado
-DebugConsole.init();
