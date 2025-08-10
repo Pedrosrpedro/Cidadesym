@@ -28,8 +28,3 @@ body { background-image: url('assets/background.jpg'); background-size: cover; b
 
 /* Sub-menus (NOVO) */
 .submenu-panel { display: flex; gap: 10px; background: rgba(30, 30, 50, 0.8); padding: 10px; border-radius: 10px 10px 0 0; margin-bottom: 60px; /* Sobe o painel para ficar acima da barra */ position: absolute; bottom: 0; transition: all 0.3s ease; }
-
-/* Ajustes de Posição do HUD do Jogo */
-#joystick-zone { bottom: 80px; left: 30px; width: 150px; height: 150px; z-index: 10; }
-#game-hud-top { position: fixed; top: 15px; left: 15px; z-index: 100; display: flex; gap: 10px; }
-#exit-game-btn, #camera-mode-btn { padding: 10px 20px; background-color: rgba(18, 16, 36, 0.8); color: #00ffff; border: 1px solid #00ffff; border-radius: 5px; font-family: 'Poppins', sans-serif; font-size: 1rem; cursor: pointer; }
