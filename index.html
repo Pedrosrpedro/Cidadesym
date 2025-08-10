@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> <!-- user-scalable=no é importante para jogos mobile -->
     <title>CidadeSym - Menu Principal</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,38 +13,38 @@
 
     <!-- Container do Menu Principal -->
     <div id="main-menu" class="menu-sidebar">
+        <!-- ... (conteúdo do menu igual ao anterior) ... -->
         <div class="title-container">
             <h1 class="game-title">CidadeSym</h1>
         </div>
-        
         <nav class="menu-nav">
             <ul>
-                <!-- Damos um ID ao botão para identificá-lo facilmente -->
                 <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
                 <li><a href="#" class="menu-button">Carregar Jogo</a></li>
                 <li><a href="#" class="menu-button">Opções</a></li>
                 <li><a href="#" class="menu-button">Sair</a></li>
             </ul>
         </nav>
-
         <div class="version">
-            <span>v0.2.0</span>
+            <span>v0.3.0</span>
         </div>
     </div>
 
-    <!-- NOVO: Container para o Jogo 3D (inicialmente escondido) -->
+    <!-- Container para o Jogo 3D -->
     <div id="game-container" class="hidden">
-        <!-- O Three.js vai criar um <canvas> aqui dentro -->
         <button id="exit-game-btn">Voltar ao Menu</button>
+        
+        <!-- NOVO: Zona para o Joystick -->
+        <div id="joystick-zone"></div>
     </div>
 
     <!-- SCRIPTS -->
-    <!-- Importação do Three.js via CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- NOVO: Importação do NippleJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     
-    <!-- Nossos scripts -->
-    <script src="game.js"></script>  <!-- Nosso novo script do jogo -->
-    <script src="script.js"></script> <!-- Script do menu (carregado por último) -->
+    <script src="game.js"></script>
+    <script src="script.js"></script>
 
 </body>
 </html>
