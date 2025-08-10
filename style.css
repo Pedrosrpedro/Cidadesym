@@ -1,103 +1,42 @@
-/* Estilos Gerais */
-body, html {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    font-family: 'Poppins', sans-serif;
-    color: #e0e0e0;
-    overflow: hidden;
+/* Adicione estas novas regras no final do seu arquivo style.css */
+
+/* Classe para esconder elementos */
+.hidden {
+    display: none !important;
 }
 
-body {
-    /* Cor de fundo sólida que funciona se a imagem falhar */
-    background-color: #0c0a1a; 
-    
-    /* --- MUDANÇA IMPORTANTE AQUI --- */
-    /* Imagem de fundo local da pasta 'assets' */
-    background-image: url('assets/background.jpg');
-    
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    
-    /* Efeito de overlay escuro sobre a imagem para melhor legibilidade */
-    box-shadow: inset 0 0 0 2000px rgba(12, 10, 26, 0.6);
-}
-
-/* Barra Lateral do Menu */
-.menu-sidebar {
+/* Container do Jogo */
+#game-container {
     position: fixed;
     top: 0;
     left: 0;
+    width: 100vw;
     height: 100vh;
-    width: 380px;
-    background: rgba(18, 16, 36, 0.85); /* Fundo semi-transparente */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-right: 1px solid rgba(0, 255, 255, 0.1);
-    
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 2rem;
-    box-sizing: border-box;
 }
 
-/* Título do Jogo */
-.game-title {
-    font-size: 4rem;
-    font-weight: 700;
-    color: #00ffff; /* Cor ciano vibrante */
-    text-shadow: 
-        0 0 5px #00ffff,
-        0 0 10px #00ffff,
-        0 0 20px #00aaff,
-        0 0 40px #00aaff;
-    margin: 0;
-    margin-bottom: 4rem;
-    text-align: center;
-}
-
-/* Navegação do Menu */
-.menu-nav {
-    width: 100%;
-}
-
-.menu-nav ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-/* Botões do Menu */
-.menu-button {
+/* Canvas que será gerado pelo Three.js */
+#game-container canvas {
     display: block;
-    text-decoration: none;
-    color: #e0e0e0;
-    background-color: rgba(0, 255, 255, 0.05);
-    border-left: 3px solid transparent;
-    font-size: 1.5rem;
-    font-weight: 400;
-    padding: 15px 25px;
-    margin: 1rem 0;
+}
+
+/* Botão para sair do jogo e voltar ao menu */
+#exit-game-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    padding: 10px 20px;
+    background-color: rgba(18, 16, 36, 0.8);
+    color: #00ffff;
+    border: 1px solid #00ffff;
+    border-radius: 5px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+    cursor: pointer;
     transition: all 0.3s ease;
 }
 
-/* Efeito Hover nos Botões */
-.menu-button:hover {
-    background-color: rgba(0, 255, 255, 0.2);
-    color: #ffffff;
-    border-left: 3px solid #00ffff;
-    transform: translateX(10px);
-}
-
-/* Versão do Jogo */
-.version {
-    position: absolute;
-    bottom: 20px;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.4);
-    font-weight: 300;
+#exit-game-btn:hover {
+    background-color: #00ffff;
+    color: #0c0a1a;
 }
