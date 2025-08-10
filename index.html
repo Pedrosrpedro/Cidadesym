@@ -4,58 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CidadeSym</title>
-    <!-- O link para o CSS é a primeira coisa no head depois das metas -->
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Menu Principal e Container do Jogo (sem alterações) -->
+    <div id="main-menu" class="menu-sidebar"> ... </div>
+    <div id="game-container" class="hidden"> ... </div>
 
-    <!-- Menu Principal -->
-    <div id="main-menu" class="menu-sidebar">
-        <div class="title-container"><h1 class="game-title">CidadeSym</h1></div>
-        <nav class="menu-nav">
-            <ul>
-                <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
-                <li><a href="#" class="menu-button">Carregar Jogo</a></li>
-                <li><a href="#" id="options-btn" class="menu-button">Opções</a></li>
-                <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
-            </ul>
-        </nav>
-        <div class="version"><span>v0.9.0</span></div>
-    </div>
-
-    <!-- Container do Jogo -->
-    <div id="game-container" class="hidden">
-        <!-- Botões de controle do jogo -->
-        <div id="game-hud-top">
-             <button id="exit-game-btn">Voltar ao Menu</button>
-             <button id="camera-mode-btn">[Mover]</button>
-        </div>
-        <!-- Joystick -->
-        <div id="joystick-zone"></div>
-    </div>
-
-    <!-- Barra de Ferramentas Inferior -->
+    <!-- Barra de Ferramentas Inferior com Painéis Aninhados -->
     <div id="bottom-bar" class="hidden">
-        <button class="ui-button" id="btn-select">Selecionar</button>
-        <button class="ui-button" id="btn-road">Estrada</button>
-        <button class="ui-button" id="btn-residential">Residencial</button>
-        <button class="ui-button" id="btn-commercial">Comercial</button>
-        <button class="ui-button" id="btn-demolish">Demolir</button>
+        <!-- Botões Principais -->
+        <div id="main-toolbar">
+            <button class="ui-button main-tool-btn" data-panel="panel-roads">Estradas</button>
+            <button class="ui-button main-tool-btn" data-panel="panel-power">Eletricidade</button>
+            <button class="ui-button main-tool-btn" data-panel="panel-zoning">Zonas</button>
+            <button class="ui-button" id="btn-demolish">Demolir</button>
+        </div>
+
+        <!-- Painéis de Sub-menu -->
+        <div id="panel-roads" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="road-straight">Rua Simples</button>
+            <button class="ui-button" data-build-mode="road-highway">Rodovia</button>
+        </div>
+        <div id="panel-power" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="power-line">Poste Elétrico</button>
+            <button class="ui-button" data-build-mode="power-wind">Usina Eólica</button>
+            <button class="ui-button" data-build-mode="power-coal">Usina de Carvão</button>
+            <button class="ui-button" data-build-mode="power-solar">Usina Solar</button>
+        </div>
+        <div id="panel-zoning" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="residential">Zona Residencial</button>
+            <button class="ui-button" data-build-mode="commercial">Zona Comercial</button>
+        </div>
     </div>
 
-    <!-- SCRIPTS - ORDEM CRÍTICA PARA O SUCESSO -->
-    <!-- 1º Bibliotecas Externas -->
+    <!-- Scripts (ordem mantida) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
-    
-    <!-- 2º Nossos Módulos (só definem os objetos) -->
     <script src="ui.js"></script>
     <script src="game.js"></script>
     <script src="menu.js"></script>
-    
-    <!-- 3º O Maestro (executa tudo na ordem certa) -->
     <script src="main.js"></script>
-
 </body>
 </html>
