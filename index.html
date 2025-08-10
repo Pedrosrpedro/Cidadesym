@@ -1,34 +1,53 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <!-- ... (head continua o mesmo) ... -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>CidadeSym - Menu Principal</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Menu Principal -->
+
+    <!-- Container do Menu Principal -->
     <div id="main-menu" class="menu-sidebar">
-        <!-- ... (conteúdo do menu igual) ... -->
+        <div class="title-container">
+            <h1 class="game-title">CidadeSym</h1>
+        </div>
+        <nav class="menu-nav">
+            <ul>
+                <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
+                <li><a href="#" class="menu-button">Carregar Jogo</a></li>
+                <li><a href="#" id="options-btn" class="menu-button">Opções</a></li>
+                <li><a href="#" class="menu-button">Sair</a></li>
+            </ul>
+        </nav>
+        <div class="version">
+            <span>v0.5.0 (debug)</span>
+        </div>
     </div>
 
-    <!-- Container do Jogo -->
+    <!-- Container para o Jogo 3D -->
     <div id="game-container" class="hidden">
-        <!-- ... (conteúdo do jogo igual) ... -->
+        <button id="exit-game-btn">Voltar ao Menu</button>
+        <button id="camera-mode-btn">[Mover]</button>
+        <div id="joystick-zone"></div>
     </div>
 
-    <!-- ===== NOVO: SISTEMA DE DEBUG ===== -->
+    <!-- ===== SISTEMA DE DEBUG ===== -->
     <button id="debug-toggle-btn">Console</button>
     <div id="debug-console-container" class="hidden">
         <div id="debug-header">
             <h3>Console de Debug</h3>
             <button id="debug-clear-btn">Limpar</button>
         </div>
-        <div id="debug-log">
-            <!-- As mensagens de log aparecerão aqui -->
-        </div>
+        <div id="debug-log"></div>
     </div>
     <!-- ================================== -->
 
-    <!-- SCRIPTS (A ORDEM É MUITO IMPORTANTE!) -->
+    <!-- SCRIPTS (A ORDEM É CRÍTICA!) -->
     <!-- 1º Console, para capturar erros dos outros scripts -->
     <script src="console.js"></script> 
     
