@@ -2,103 +2,100 @@
 body, html {
     margin: 0;
     padding: 0;
+    width: 100%;
     height: 100%;
-    font-family: 'Roboto', sans-serif;
-    color: #fff;
+    font-family: 'Poppins', sans-serif;
+    color: #e0e0e0;
     overflow: hidden;
 }
 
-/* Vídeo de Fundo */
-.background-video {
+body {
+    /* Cor de fundo sólida que funciona se a imagem falhar */
+    background-color: #0c0a1a; 
+    
+    /* Imagem de fundo */
+    background-image: url('https://images.pexels.com/photos/2387873/pexels-photo-2387873.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    
+    /* Efeito de overlay escuro sobre a imagem para melhor legibilidade */
+    box-shadow: inset 0 0 0 2000px rgba(12, 10, 26, 0.6);
+}
+
+/* Barra Lateral do Menu */
+.menu-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    overflow: hidden;
-}
-
-#bg-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-/* Overlay Escuro sobre o Vídeo */
-.background-video::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-}
-
-/* Container Principal do Menu */
-.main-menu {
+    height: 100vh;
+    width: 380px;
+    background: rgba(18, 16, 36, 0.85); /* Fundo semi-transparente */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-right: 1px solid rgba(0, 255, 255, 0.1);
+    
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    height: 100%;
-    text-align: center;
+    padding: 2rem;
+    box-sizing: border-box;
 }
 
 /* Título do Jogo */
 .game-title {
-    font-size: 5rem;
+    font-size: 4rem;
     font-weight: 700;
-    margin-bottom: 1.5rem;
-    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
-    letter-spacing: 2px;
-}
-
-/* Container dos Botões com Efeito Glassmorphism */
-.menu-container {
-    background: rgba(25, 25, 25, 0.4);
-    padding: 2.5rem 4rem;
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px); /* Para compatibilidade com Safari */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #00ffff; /* Cor ciano vibrante */
+    text-shadow: 
+        0 0 5px #00ffff,
+        0 0 10px #00ffff,
+        0 0 20px #00aaff,
+        0 0 40px #00aaff;
+    margin: 0;
+    margin-bottom: 4rem; /* Espaço entre o título e os botões */
+    text-align: center;
 }
 
 /* Navegação do Menu */
+.menu-nav {
+    width: 100%;
+}
+
 .menu-nav ul {
     list-style: none;
     padding: 0;
     margin: 0;
 }
 
-.menu-nav ul li {
-    margin: 1.2rem 0;
-}
-
-.menu-nav ul li a {
-    text-decoration: none;
-    color: #fff;
-    font-size: 1.8rem;
-    font-weight: 300;
-    padding: 0.8rem 1.5rem;
-    border-radius: 8px;
-    transition: background-color 0.3s ease, transform 0.2s ease;
+/* Botões do Menu */
+.menu-button {
     display: block;
+    text-decoration: none;
+    color: #e0e0e0;
+    background-color: rgba(0, 255, 255, 0.05); /* Fundo sutil */
+    border-left: 3px solid transparent; /* Borda para o efeito hover */
+    font-size: 1.5rem;
+    font-weight: 400;
+    padding: 15px 25px;
+    margin: 1rem 0;
+    transition: all 0.3s ease;
 }
 
 /* Efeito Hover nos Botões */
-.menu-nav ul li a:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-    transform: scale(1.05);
+.menu-button:hover {
+    background-color: rgba(0, 255, 255, 0.2);
+    color: #ffffff;
+    border-left: 3px solid #00ffff;
+    transform: translateX(10px); /* Pequeno deslocamento para a direita */
 }
 
-/* Informação de Versão */
+/* Versão do Jogo */
 .version {
     position: absolute;
-    bottom: 10px;
-    right: 15px;
+    bottom: 20px;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 300;
 }
