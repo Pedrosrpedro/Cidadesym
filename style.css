@@ -143,3 +143,16 @@ body {
     background-color: rgba(255, 71, 87, 0.1);
     font-weight: bold;
 }
+
+/* Adicione isso ao seu CSS */
+.debug-buttons {
+    display: flex;
+    gap: 10px; /* Espaço entre os botões */
+}
+#debug-close-btn {
+    background: #8B0000; /* Vermelho escuro */
+    color: white;
+    border: 1px solid #ff4757;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
