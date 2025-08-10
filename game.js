@@ -1,67 +1,93 @@
-// Agrupamos a lógica do jogo em um objeto para manter o código organizado
 const Game = {
-    // Variáveis da cena 3D
+    // Variáveis da cena
     scene: null,
     camera: null,
     renderer: null,
     mapPlane: null,
 
-    // Função de inicialização
+    // NOVO: Variáveis para o movimento
+    joystick: null,
+    moveDirection: { x: 0, z: 0 }, // Armazena a direção do movimento
+    moveSpeed: 0.5, // Velocidade do movimento da câmera
+
     init: function() {
-        // --- 1. Cena (Scene) ---
-        // A cena é o container que guarda todos os objetos, luzes e câmeras.
+        // --- Configuração da Cena, Câmera, Renderizador e Luzes (igual ao anterior) ---
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Cor de céu azul
-
-        // --- 2. Câmera (Camera) ---
-        // A câmera define o que será visto na cena.
-        // PerspectiveCamera(ângulo de visão, proporção da tela, perto, longe)
+        this.scene.background = new THREE.Color(0x87CEEB);
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 50, 50); // Posição inicial da câmera
-        this.camera.lookAt(0, 0, 0); // Fazer a câmera olhar para o centro da cena
-
-        // --- 3. Renderizador (Renderer) ---
-        // O renderizador "desenha" a cena na tela.
+        this.camera.position.set(0, 50, 50);
+        this.camera.lookAt(0, 0, 0);
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('game-container').appendChild(this.renderer.domElement);
-
-        // --- 4. Luzes (Lights) ---
-        // Sem luz, os objetos ficariam pretos.
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Luz ambiente, ilumina tudo igualmente
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         this.scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Luz direcional, como o sol
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(50, 100, 25);
         this.scene.add(directionalLight);
 
-        // --- 5. O Mapa (um Plano) ---
-        // Criamos a forma (Geometria) e a aparência (Material).
-        const mapGeometry = new THREE.PlaneGeometry(100, 100); // Um plano de 100x100 unidades
-        const mapMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Material verde que reage à luz
+        // --- Configuração do Mapa (igual ao anterior) ---
+        const mapGeometry = new THREE.PlaneGeometry(100, 100);
+        const mapMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
         this.mapPlane = new THREE.Mesh(mapGeometry, mapMaterial);
-        this.mapPlane.rotation.x = -Math.PI / 2; // Rotacionar para que fique deitado no "chão"
+        this.mapPlane.rotation.x = -Math.PI / 2;
         this.scene.add(this.mapPlane);
+
+        // --- NOVO: Inicialização do Joystick ---
+        this.setupJoystick();
 
         // Inicia o loop de animação
         this.animate();
 
-        // Ajustar a tela se a janela do navegador for redimensionada
         window.addEventListener('resize', () => {
             this.camera.aspect = window.innerWidth / window.innerHeight;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
     },
+    
+    // NOVO: Função para configurar o joystick
+    setupJoystick: function() {
+        const options = {
+            zone: document.getElementById('joystick-zone'),
+            mode: 'static', // O joystick fica fixo
+            position: { left: '50%', top: '50%' },
+            color: 'cyan',
+            size: 150
+        };
 
-    // --- 6. Loop de Animação (Animate) ---
-    // Esta função é chamada repetidamente (cerca de 60 vezes por segundo)
+        this.joystick = nipplejs.create(options);
+
+        // Adiciona listeners para os eventos do joystick
+        this.joystick.on('move', (evt, data) => {
+            // O ângulo é em graus, convertemos para radianos
+            const angle = data.angle.radian;
+            // A força nos diz quão longe o joystick foi movido (de 0 a 1)
+            const force = data.force;
+
+            // Calculamos a direção do movimento
+            this.moveDirection.x = Math.cos(angle) * force;
+            this.moveDirection.z = -Math.sin(angle) * force; // Z é negativo para "cima" ser "para frente"
+        });
+
+        this.joystick.on('end', () => {
+            // Quando soltamos o joystick, a câmera para
+            this.moveDirection.x = 0;
+            this.moveDirection.z = 0;
+        });
+    },
+
     animate: function() {
-        requestAnimationFrame(() => this.animate()); // Pede ao navegador para chamar a função de novo na próxima frame
+        requestAnimationFrame(() => this.animate());
 
-        // Aqui podemos adicionar animações no futuro (ex: girar a câmera)
-        
-        // Renderiza a cena a partir da perspectiva da câmera
+        // --- NOVO: Lógica de Movimento da Câmera ---
+        if (this.moveDirection.x !== 0 || this.moveDirection.z !== 0) {
+            // Move a câmera nas direções X e Z do mundo
+            this.camera.position.x += this.moveDirection.x * this.moveSpeed;
+            this.camera.position.z += this.moveDirection.z * this.moveSpeed;
+        }
+
+        // Renderiza a cena
         this.renderer.render(this.scene, this.camera);
     }
 };
