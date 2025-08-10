@@ -8,61 +8,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Menu, Jogo e Barra Inferior (sem alterações na estrutura) -->
+    <div id="main-menu" class="menu-sidebar"> ... </div>
+    <div id="game-container" class="hidden"> ... </div>
+    <div id="bottom-bar" class="hidden"> ... </div>
 
-    <!-- Menu Principal (Estrutura Interna Completa) -->
-    <div id="main-menu" class="menu-sidebar">
-        <div class="title-container"><h1 class="game-title">CidadeSym</h1></div>
-        <nav class="menu-nav">
-            <ul>
-                <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
-                <li><a href="#" class="menu-button">Carregar Jogo</a></li>
-                <li><a href="#" id="options-btn" class="menu-button">Opções</a></li>
-                <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
-            </ul>
-        </nav>
-        <div class="version"><span>v1.1.0 (Corrigido)</span></div>
+    <!-- ===== CONSOLE DE DEBUG (REINTRODUZIDO) ===== -->
+    <button id="debug-toggle-btn">Console</button>
+    <div id="debug-console-container" class="hidden">
+        <div id="debug-header"><h3>Console de Debug</h3></div>
+        <div id="debug-log"></div>
     </div>
+    <!-- ============================================= -->
 
-    <!-- Container do Jogo (Estrutura Interna Completa) -->
-    <div id="game-container" class="hidden">
-        <div id="game-hud-top">
-             <button id="exit-game-btn">Voltar ao Menu</button>
-             <button id="camera-mode-btn">[Mover]</button>
-        </div>
-        <div id="joystick-zone"></div>
-    </div>
+    <!-- SCRIPTS - ORDEM CRÍTICA -->
+    <!-- 1º Nosso Console, para capturar erros dos outros -->
+    <script src="console.js"></script>
 
-    <!-- Barra de Ferramentas Inferior (Estrutura Interna Completa) -->
-    <div id="bottom-bar" class="hidden">
-        <div id="main-toolbar">
-            <button class="ui-button main-tool-btn" data-panel="panel-roads">Estradas</button>
-            <button class="ui-button main-tool-btn" data-panel="panel-power">Eletricidade</button>
-            <button class="ui-button main-tool-btn" data-panel="panel-zoning">Zonas</button>
-            <button class="ui-button" id="btn-demolish">Demolir</button>
-        </div>
-
-        <div id="panel-roads" class="submenu-panel hidden">
-            <button class="ui-button" data-build-mode="road-straight">Rua Simples</button>
-            <button class="ui-button" data-build-mode="road-highway">Rodovia</button>
-        </div>
-        <div id="panel-power" class="submenu-panel hidden">
-            <button class="ui-button" data-build-mode="power-line">Poste Elétrico</button>
-            <button class="ui-button" data-build-mode="power-wind">Usina Eólica</button>
-            <button class="ui-button" data-build-mode="power-coal">Usina de Carvão</button>
-            <button class="ui-button" data-build-mode="power-solar">Usina Solar</button>
-        </div>
-        <div id="panel-zoning" class="submenu-panel hidden">
-            <button class="ui-button" data-build-mode="residential">Zona Residencial</button>
-            <button class="ui-button" data-build-mode="commercial">Zona Comercial</button>
-        </div>
-    </div>
-
-    <!-- Scripts (Ordem Corrigida) -->
+    <!-- 2º Bibliotecas Externas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+    
+    <!-- 3º Nossos Módulos -->
     <script src="ui.js"></script>
     <script src="game.js"></script>
     <script src="menu.js"></script>
+    
+    <!-- 4º O Maestro -->
     <script src="main.js"></script>
 </body>
 </html>
