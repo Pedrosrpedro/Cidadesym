@@ -2,9 +2,10 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> <!-- user-scalable=no é importante para jogos mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CidadeSym - Menu Principal</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- Garanta que esta linha esteja EXATAMENTE assim -->
+    <link rel="stylesheet" href="style.css"> 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -13,7 +14,6 @@
 
     <!-- Container do Menu Principal -->
     <div id="main-menu" class="menu-sidebar">
-        <!-- ... (conteúdo do menu igual ao anterior) ... -->
         <div class="title-container">
             <h1 class="game-title">CidadeSym</h1>
         </div>
@@ -21,12 +21,13 @@
             <ul>
                 <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
                 <li><a href="#" class="menu-button">Carregar Jogo</a></li>
-                <li><a href="#" class="menu-button">Opções</a></li>
+                <!-- Damos um ID ao botão de Opções -->
+                <li><a href="#" id="options-btn" class="menu-button">Opções</a></li>
                 <li><a href="#" class="menu-button">Sair</a></li>
             </ul>
         </nav>
         <div class="version">
-            <span>v0.3.0</span>
+            <span>v0.4.0</span>
         </div>
     </div>
 
@@ -34,15 +35,15 @@
     <div id="game-container" class="hidden">
         <button id="exit-game-btn">Voltar ao Menu</button>
         
-        <!-- NOVO: Zona para o Joystick -->
+        <!-- NOVO: Botão para alternar o modo da câmera -->
+        <button id="camera-mode-btn">[Mover]</button>
+
         <div id="joystick-zone"></div>
     </div>
 
     <!-- SCRIPTS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- NOVO: Importação do NippleJS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
-    
     <script src="game.js"></script>
     <script src="script.js"></script>
 
