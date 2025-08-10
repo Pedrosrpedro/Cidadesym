@@ -13,8 +13,10 @@ body {
     /* Cor de fundo sólida que funciona se a imagem falhar */
     background-color: #0c0a1a; 
     
-    /* Imagem de fundo */
-    background-image: url('https://images.pexels.com/photos/2387873/pexels-photo-2387873.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2');
+    /* --- MUDANÇA IMPORTANTE AQUI --- */
+    /* Imagem de fundo local da pasta 'assets' */
+    background-image: url('assets/background.jpg');
+    
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -54,7 +56,7 @@ body {
         0 0 20px #00aaff,
         0 0 40px #00aaff;
     margin: 0;
-    margin-bottom: 4rem; /* Espaço entre o título e os botões */
+    margin-bottom: 4rem;
     text-align: center;
 }
 
@@ -74,8 +76,8 @@ body {
     display: block;
     text-decoration: none;
     color: #e0e0e0;
-    background-color: rgba(0, 255, 255, 0.05); /* Fundo sutil */
-    border-left: 3px solid transparent; /* Borda para o efeito hover */
+    background-color: rgba(0, 255, 255, 0.05);
+    border-left: 3px solid transparent;
     font-size: 1.5rem;
     font-weight: 400;
     padding: 15px 25px;
@@ -88,7 +90,7 @@ body {
     background-color: rgba(0, 255, 255, 0.2);
     color: #ffffff;
     border-left: 3px solid #00ffff;
-    transform: translateX(10px); /* Pequeno deslocamento para a direita */
+    transform: translateX(10px);
 }
 
 /* Versão do Jogo */
