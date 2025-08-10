@@ -40,3 +40,18 @@
     background-color: #00ffff;
     color: #0c0a1a;
 }
+
+/* Adicione esta nova regra ao final do seu arquivo style.css */
+
+#joystick-zone {
+    position: fixed;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%); /* Centraliza o joystick horizontalmente */
+    width: 200px;
+    height: 200px;
+    /* Deixe o fundo transparente para ver o jogo por trás, 
+       mas ainda ter uma área para o joystick funcionar */
+    background: rgba(0,0,0,0.0); 
+    z-index: 10;
+}
