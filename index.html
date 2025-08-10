@@ -1,49 +1,42 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>CidadeSym - Menu Principal</title>
-    <!-- Garanta que esta linha esteja EXATAMENTE assim -->
-    <link rel="stylesheet" href="style.css"> 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- ... (head continua o mesmo) ... -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <!-- Container do Menu Principal -->
+    <!-- Menu Principal -->
     <div id="main-menu" class="menu-sidebar">
-        <div class="title-container">
-            <h1 class="game-title">CidadeSym</h1>
-        </div>
-        <nav class="menu-nav">
-            <ul>
-                <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
-                <li><a href="#" class="menu-button">Carregar Jogo</a></li>
-                <!-- Damos um ID ao botão de Opções -->
-                <li><a href="#" id="options-btn" class="menu-button">Opções</a></li>
-                <li><a href="#" class="menu-button">Sair</a></li>
-            </ul>
-        </nav>
-        <div class="version">
-            <span>v0.4.0</span>
-        </div>
+        <!-- ... (conteúdo do menu igual) ... -->
     </div>
 
-    <!-- Container para o Jogo 3D -->
+    <!-- Container do Jogo -->
     <div id="game-container" class="hidden">
-        <button id="exit-game-btn">Voltar ao Menu</button>
-        
-        <!-- NOVO: Botão para alternar o modo da câmera -->
-        <button id="camera-mode-btn">[Mover]</button>
-
-        <div id="joystick-zone"></div>
+        <!-- ... (conteúdo do jogo igual) ... -->
     </div>
 
-    <!-- SCRIPTS -->
+    <!-- ===== NOVO: SISTEMA DE DEBUG ===== -->
+    <button id="debug-toggle-btn">Console</button>
+    <div id="debug-console-container" class="hidden">
+        <div id="debug-header">
+            <h3>Console de Debug</h3>
+            <button id="debug-clear-btn">Limpar</button>
+        </div>
+        <div id="debug-log">
+            <!-- As mensagens de log aparecerão aqui -->
+        </div>
+    </div>
+    <!-- ================================== -->
+
+    <!-- SCRIPTS (A ORDEM É MUITO IMPORTANTE!) -->
+    <!-- 1º Console, para capturar erros dos outros scripts -->
+    <script src="console.js"></script> 
+    
+    <!-- 2º Bibliotecas externas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+    
+    <!-- 3º Nossos scripts de lógica -->
     <script src="game.js"></script>
     <script src="script.js"></script>
 
