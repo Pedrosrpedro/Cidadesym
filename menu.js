@@ -2,8 +2,6 @@
 
 const Menu = {
     init: function() {
-        DebugConsole.log("Menu.init: Configurando listeners dos botões.");
-        
         const addUniversalListener = (element, callback) => {
             if (!element) return;
             const action = (e) => { e.preventDefault(); callback(e); };
@@ -13,36 +11,30 @@ const Menu = {
         
         const newGameBtn = document.getElementById('new-game-btn');
         const optionsBtn = document.getElementById('options-btn');
-        const exitGameBtn = document.getElementById('exit-game-btn');
         const sairBtn = document.getElementById('exit-btn');
         
-        if (!newGameBtn || !optionsBtn || !exitGameBtn || !sairBtn) {
-            DebugConsole.error("Menu.init: Um ou mais botões não foram encontrados no HTML!");
+        if (!newGameBtn || !optionsBtn || !sairBtn) {
+            console.error("Menu.init: Um ou mais botões do menu não foram encontrados!");
             return;
         }
 
         addUniversalListener(newGameBtn, () => {
-            DebugConsole.log("Botão 'Novo Jogo' pressionado.");
             document.getElementById('main-menu').classList.add('hidden');
             document.getElementById('game-container').classList.remove('hidden');
+            document.getElementById('bottom-bar').classList.remove('hidden');
             Game.init();
         });
 
-        addUniversalListener(exitGameBtn, () => window.location.reload());
-
         addUniversalListener(optionsBtn, () => {
-            DebugConsole.log("Botão 'Opções' (Tela Cheia) pressionado.");
             if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => DebugConsole.error(`Tela cheia falhou: ${err.message}`));
+                document.documentElement.requestFullscreen().catch(err => console.error(err));
             } else {
                 document.exitFullscreen();
             }
         });
 
         addUniversalListener(sairBtn, () => {
-            if (confirm('Tem certeza de que deseja sair?')) alert('Obrigado por jogar CidadeSym!');
+            if (confirm('Tem certeza de que deseja sair?')) alert('Obrigado por jogar!');
         });
-        
-        DebugConsole.log("Menu.init: Configuração do menu concluída.");
     }
 };
