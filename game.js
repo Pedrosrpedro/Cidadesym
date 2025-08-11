@@ -1,4 +1,35 @@
-const Noise = { p: new Uint8Array(512), init: function() { const p = []; for (let i = 0; i < 256; i++) p[i] = i; for (let i = 255; i > 0; i--) { const n = Math.floor((i + 1) * Math.random());[p[i], p[n]] = [p[n], p[i]]; } for (let i = 0; i < 256; i++) this.p[i] = this.p[i + 256] = p[i]; }, lerp: (a, b, t) => a + t * (b - a), grad: function(hash, x, y) { const h = hash & 15; const u = h < 8 ? x : y; const v = h < 4 ? y : h === 12 || h === 14 ? x : 0; return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v); }, perlin2: function(x, y) { const X = Math.floor(x) & 255; const Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const fade = t => t * t * t * (t * (t * 6 - 15) + 10); const u = fade(x); const v = fade(y); const p = this.p; const A = p[X] + Y, B = p[X + 1] + Y; return this.lerp(this.lerp(this.grad(p[A], x, y), this.grad(p[B], x - 1, y), u), this.lerp(this.grad(p[A + 1], x, y - 1), this.grad(p[B + 1], x - 1, y - 1), u), v); } };
+// Objeto para geração de ruído Perlin, usado na criação do terreno.
+const Noise = {
+    p: new Uint8Array(512),
+    init: function() {
+        const p = [];
+        for (let i = 0; i < 256; i++) p[i] = i;
+        for (let i = 255; i > 0; i--) {
+            const n = Math.floor((i + 1) * Math.random());
+            [p[i], p[n]] = [p[n], p[i]];
+        }
+        for (let i = 0; i < 256; i++) this.p[i] = this.p[i + 256] = p[i];
+    },
+    lerp: (a, b, t) => a + t * (b - a),
+    grad: function(hash, x, y) {
+        const h = hash & 15;
+        const u = h < 8 ? x : y;
+        const v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
+        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+    },
+    perlin2: function(x, y) {
+        const X = Math.floor(x) & 255;
+        const Y = Math.floor(y) & 255;
+        x -= Math.floor(x);
+        y -= Math.floor(y);
+        const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+        const u = fade(x);
+        const v = fade(y);
+        const p = this.p;
+        const A = p[X] + Y, B = p[X + 1] + Y;
+        return this.lerp(this.lerp(this.grad(p[A], x, y), this.grad(p[B], x - 1, y), u), this.lerp(this.grad(p[A + 1], x, y - 1), this.grad(p[B + 1], x - 1, y - 1), u), v);
+    }
+};
 Noise.init();
 
 const Game = {
@@ -12,7 +43,9 @@ const Game = {
     waterProducers: [], waterConnectors: [], sewageProcessors: [], waterOverlay: null,
     powerAvailable: 0, powerNeeded: 0,
     logicalGrid: [], gridWorldSize: 500, gridCells: 50,
-    population: 0, vehicles: [], lastSpawnTime: 0, lastTime: 0,
+    population: 0, vehicles: [], decorativeVehicles: [], lastSpawnTime: 0, lastTime: 0,
+    roadGraph: { nodes: {}, edges: {} },
+    pathfinder: null,
 
     init: function() {
         if (this.isInitialized) return;
@@ -20,7 +53,7 @@ const Game = {
         this.gridCells = this.gridWorldSize / this.gridSize;
         this.initializeLogicalGrid();
         this.setupScene();
-        this.createInitialHighway();
+        this.setupInitialInfrastructure(); // <-- CHAMADA ATUALIZADA
         this.setupControls();
         this.animate = this.animate.bind(this);
         this.animate(0);
@@ -47,34 +80,123 @@ const Game = {
         this.waterOverlay = new THREE.Group(); this.waterOverlay.visible = false; this.scene.add(this.waterOverlay);
     },
 
-    createPennisulaTerrain: function() { const segments = 128; const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments); const vertices = geometry.attributes.position; const colors = []; const sandColor = new THREE.Color(0xC2B280), grassColor = new THREE.Color(0x55902A), rockColor = new THREE.Color(0x808080), snowColor = new THREE.Color(0xFFFAFA); const center = new THREE.Vector2(0, 0); const maxDist = this.gridWorldSize / 2; const baseHeight = 18.0; const maxAmplitude = 45.0; for (let i = 0; i < vertices.count; i++) { const x = vertices.getX(i); const z = vertices.getY(i); let noise = 0; let frequency = 1.8 / this.gridWorldSize; let amplitude = maxAmplitude; for (let j = 0; j < 4; j++) { noise += Noise.perlin2(x * frequency, z * frequency) * amplitude; frequency *= 2.1; amplitude /= 2.2; } const dist = center.distanceTo(new THREE.Vector2(x, z)); let islandFalloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.2); let continentFalloff = Math.pow(THREE.MathUtils.smoothstep(z, maxDist * 0.5, maxDist), 2); let finalFalloff = THREE.MathUtils.lerp(islandFalloff, 1.0, continentFalloff); const flatAreaFactor = 1.0 - Math.pow(THREE.MathUtils.smoothstep(dist, 70, 150), 2); noise *= flatAreaFactor; let height = (baseHeight + noise) * finalFalloff; if (height < 6) height = 6; vertices.setZ(i, height); if (height < 10) colors.push(sandColor.r, sandColor.g, sandColor.b); else if (height < 30) colors.push(grassColor.r, grassColor.g, grassColor.b); else if (height < 45) colors.push(rockColor.r, rockColor.g, rockColor.b); else colors.push(snowColor.r, snowColor.g, snowColor.b); } geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); geometry.computeVertexNormals(); const material = new THREE.MeshLambertMaterial({ vertexColors: true }); const mesh = new THREE.Mesh(geometry, material); mesh.rotation.x = -Math.PI / 2; return mesh; },
-    
     // ==================================================================
-    // FUNÇÃO CORRIGIDA - createInitialHighway
-    // Cria a rodovia inicial usando múltiplos pontos para seguir o relevo do terreno,
-    // em vez de criar uma linha reta que afundava no mapa.
+    // FUNÇÃO DE TERRENO ATUALIZADA - Cria uma Península com Continente
     // ==================================================================
-    createInitialHighway: function() {
-        this.terrainMesh.updateMatrixWorld(true);
-        const createSingleLane = (x_pos, reversed) => {
-            const halfSize = this.gridWorldSize / 2;
-            const startZ = halfSize - 1;
-            const endZ = 10;
-            const segments = 15; // Aumentar segmentos para uma curva mais suave no terreno
-            const points = [];
+    createPennisulaTerrain: function() {
+        const segments = 128;
+        const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments);
+        const vertices = geometry.attributes.position;
+        const colors = [];
+        const sandColor = new THREE.Color(0xC2B280), grassColor = new THREE.Color(0x55902A), rockColor = new THREE.Color(0x808080);
+        
+        const center = new THREE.Vector2(0, 0);
+        const maxDist = this.gridWorldSize / 2;
+        const baseHeight = 18.0;
+        const maxAmplitude = 45.0;
 
-            for (let i = 0; i <= segments; i++) {
-                const z = startZ + (endZ - startZ) * (i / segments);
-                const height = this.getTerrainHeight(x_pos, z) + 0.3;
-                points.push(new THREE.Vector3(x_pos, height, z));
+        for (let i = 0; i < vertices.count; i++) {
+            const x = vertices.getX(i);
+            const z = vertices.getY(i);
+            
+            let noise = 0;
+            let frequency = 1.8 / this.gridWorldSize;
+            let amplitude = maxAmplitude;
+            for (let j = 0; j < 4; j++) {
+                noise += Noise.perlin2(x * frequency, z * frequency) * amplitude;
+                frequency *= 2.1;
+                amplitude /= 2.2;
             }
-            if (reversed) points.reverse();
-            this.createRoadObject(points);
-        };
-        createSingleLane(15, false);
-        createSingleLane(-15, true);
+
+            const distFromCenter = center.distanceTo(new THREE.Vector2(x, z));
+            const isthmusWidth = 60;
+            const isthmusFactor = Math.exp(-Math.pow(x / isthmusWidth, 2));
+            const islandFalloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(distFromCenter, maxDist * 0.6, maxDist), 1.2);
+            const finalFalloff = THREE.MathUtils.lerp(islandFalloff, 1.0, isthmusFactor);
+            
+            let height = (baseHeight + noise) * finalFalloff;
+
+            if (z > this.gridWorldSize * 0.4) {
+                 height = Math.max(height, baseHeight * 0.8 + noise * 0.1);
+            }
+
+            if (height < 6) height = 6;
+            vertices.setZ(i, height);
+
+            if (height < 10) colors.push(sandColor.r, sandColor.g, sandColor.b);
+            else if (height < 30) colors.push(grassColor.r, grassColor.g, grassColor.b);
+            else colors.push(rockColor.r, rockColor.g, rockColor.b);
+        }
+        
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
+        const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.rotation.x = -Math.PI / 2;
+        return mesh;
     },
     
+    // ==================================================================
+    // NOVAS FUNÇÕES PARA CRIAR A INFRAESTRUTURA INICIAL
+    // ==================================================================
+    setupInitialInfrastructure: function() {
+        this.terrainMesh.updateMatrixWorld(true);
+        this.createContinentHighway();
+        
+        const connectingRoadPoints = [
+            new THREE.Vector3(0, 0, this.gridWorldSize * 0.45),
+            new THREE.Vector3(20, 0, this.gridWorldSize * 0.35),
+            new THREE.Vector3(-30, 0, this.gridWorldSize * 0.2),
+            new THREE.Vector3(0, 0, this.gridWorldSize * 0.1)
+        ];
+
+        const pointsWithHeight = connectingRoadPoints.map(p => 
+            new THREE.Vector3(p.x, this.getTerrainHeight(p.x, p.z) + 0.3, p.z)
+        );
+        
+        this.createRoadObject(pointsWithHeight);
+        this.buildRoadGraph(); // Constrói o grafo inicial de ruas
+    },
+
+    createContinentHighway: function() {
+        const roadZ = this.gridWorldSize * 0.48;
+        const halfSize = this.gridWorldSize / 2;
+        
+        const roadGeo = new THREE.PlaneGeometry(this.gridWorldSize, 30);
+        const roadMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+        roadMesh.rotation.x = -Math.PI / 2;
+        roadMesh.position.set(0, this.getTerrainHeight(0, roadZ) + 0.1, roadZ);
+        this.scene.add(roadMesh);
+        
+        for(let i = 0; i < 10; i++) {
+            this.spawnDecorativeVehicle();
+        }
+    },
+
+    spawnDecorativeVehicle: function() {
+        const roadZ = this.gridWorldSize * 0.48;
+        const halfSize = this.gridWorldSize / 2;
+        const carColors = [0x888888, 0xaaaaaa, 0x666666];
+        
+        const geo = new THREE.BoxGeometry(2.5, 2, 4.5);
+        const mat = new THREE.MeshLambertMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)] });
+        const car = new THREE.Mesh(geo, mat);
+
+        const direction = Math.random() > 0.5 ? 1 : -1;
+        const startX = direction > 0 ? -halfSize - 20 : halfSize + 20;
+        const laneZ = roadZ + (direction > 0 ? 5 : -5);
+
+        car.position.set(startX, this.getTerrainHeight(startX, laneZ) + 2.2, laneZ);
+        car.rotation.y = direction > 0 ? 0 : Math.PI;
+
+        this.decorativeVehicles.push({
+            mesh: car,
+            speed: direction * (1.5 + Math.random() * 1.5)
+        });
+        this.scene.add(car);
+    },
+
     setBuildMode: function(mode) {
         if (this.buildMode === 'road-curved' && this.currentCurvePoints.length > 0) {
             this.cancelCurvedRoad();
@@ -128,11 +250,6 @@ const Game = {
     updateTerrainColors: function() { const terrainGeo = this.terrainMesh.geometry; const vertices = terrainGeo.attributes.position; const colors = []; const sandColor = new THREE.Color(0xC2B280), grassColor = new THREE.Color(0x55902A), rockColor = new THREE.Color(0x808080), snowColor = new THREE.Color(0xFFFAFA); for(let i = 0; i < vertices.count; i++) { const height = vertices.getZ(i); if (height < 10) colors.push(sandColor.r, sandColor.g, sandColor.b); else if (height < 30) colors.push(grassColor.r, grassColor.g, grassColor.b); else if (height < 45) colors.push(rockColor.r, rockColor.g, rockColor.b); else colors.push(snowColor.r, snowColor.g, snowColor.b); } terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); terrainGeo.attributes.color.needsUpdate = true; },
     cancelCurvedRoad: function() { this.curveGuideMeshes.forEach(mesh => this.scene.remove(mesh)); this.curveGuideMeshes = []; this.currentCurvePoints = []; },
 
-    // ==================================================================
-    // FUNÇÃO CORRIGIDA - createRoadObject
-    // A linha `mesh.scale.y = 0.05;` foi removida. Ela achatava a estrada,
-    // fazendo-a desaparecer ou afundar no terreno.
-    // ==================================================================
     createRoadObject: function(points) {
         if (!points || points.length < 2) return;
         const curve = new THREE.CatmullRomCurve3(points);
@@ -140,8 +257,6 @@ const Game = {
         const roadGeo = new THREE.TubeGeometry(curve, Math.max(20, Math.floor(curve.getLength())), roadWidth / 2, 4, false);
         const roadMat = new THREE.MeshLambertMaterial({ color: 0x444444, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(roadGeo, roadMat);
-        // A linha abaixo foi removida para impedir que a estrada seja achatada.
-        // mesh.scale.y = 0.05; 
         const curvePoints = curve.getPoints(Math.max(50, Math.floor(curve.getLength() * 1.5)));
         mesh.userData = { type: 'road', points: curvePoints, curve: curve };
         this.terraformArea(mesh);
@@ -164,11 +279,6 @@ const Game = {
         powerLineGroup.userData = { isPowered: false, type: 'connector', powerRadius: this.gridSize * 2.5, consumption: 0.2 }; this.scene.add(powerLineGroup); this.cityObjects.push(powerLineGroup); this.powerConnectors.push(powerLineGroup); this.updatePowerGrid();
     },
 
-    // ==================================================================
-    // FUNÇÃO CORRIGIDA - createPipeObject
-    // Adicionado `mesh.visible` para que os canos respeitem a visibilidade da
-    // sobreposição de água no momento da criação.
-    // ==================================================================
     createPipeObject: function(start, end) {
         const startY = this.getTerrainHeight(start.x, start.z) - 1.0;
         const endY = this.getTerrainHeight(end.x, end.z) - 1.0;
@@ -177,7 +287,7 @@ const Game = {
         const pipeMat = new THREE.MeshLambertMaterial({ color: 0x3d85c6 });
         const mesh = new THREE.Mesh(pipeGeo, pipeMat);
         mesh.userData = { type: 'pipe', connectionRadius: this.gridSize * 1.5 };
-        mesh.visible = this.waterOverlay.visible; // <-- CORREÇÃO APLICADA
+        mesh.visible = this.waterOverlay.visible;
         this.scene.add(mesh);
         this.cityObjects.push(mesh);
         this.waterConnectors.push(mesh);
@@ -189,18 +299,14 @@ const Game = {
     findAndModifyVertices: function(center, size, newHeight, vertices, modifiedSet) { const halfSize = size / 2; for (let i = 0; i < vertices.count; i++) { if (modifiedSet.has(i)) continue; const vX = vertices.getX(i); const vZ = vertices.getY(i); const dist = Math.sqrt(Math.pow(vX - center.x, 2) + Math.pow(vZ - center.z, 2)); if (dist < halfSize) { const currentHeight = vertices.getZ(i); const falloff = 1.0 - THREE.MathUtils.smoothstep(dist, 0, halfSize); const finalHeight = THREE.MathUtils.lerp(currentHeight, newHeight, falloff); vertices.setZ(i, finalHeight); modifiedSet.add(i); } } },
     getTerrainHeight: function(x, z) { this.raycaster.ray.origin.set(x, 200, z); this.raycaster.ray.direction.set(0, -1, 0); const intersects = this.raycaster.intersectObject(this.terrainMesh); return intersects.length > 0 ? intersects[0].point.y : 0; },
     removeObject: function(object, doRecalculate = true) { const wasRoad = object.userData.type?.startsWith('road'); const wasResidential = object.userData.type === 'consumer' && object.userData.isOccupied; if(wasResidential) { this.population--; this.updatePopulationUI(); } this.cityObjects = this.cityObjects.filter(o => o.uuid !== object.uuid); this.powerProducers = this.powerProducers.filter(o => o.uuid !== object.uuid); this.powerConsumers = this.powerConsumers.filter(o => o.uuid !== object.uuid); this.powerConnectors = this.powerConnectors.filter(o => o.uuid !== object.uuid); this.waterProducers = this.waterProducers.filter(o => o.uuid !== object.uuid); this.waterConnectors = this.waterConnectors.filter(o => o.uuid !== object.uuid); this.sewageProcessors = this.sewageProcessors.filter(o => o.uuid !== object.uuid); if(object.parent) object.parent.remove(object); object.traverse(child => { if (child.isMesh) { if (child.geometry) child.geometry.dispose(); if (child.material) child.material.dispose(); } }); if (wasRoad && doRecalculate) { this.recalculateAllRoadAdjacency(); } this.updatePowerGrid(); this.updateWaterGrid(); },
-    demolishObject: function() { this.raycaster.setFromCamera(this.mouse, this.camera); const intersects = this.raycaster.intersectObjects(this.cityObjects, true); if (intersects.length > 0) { let objectToDemolish = intersects[0].object; while (objectToDemolish.parent && objectToDemolish.parent !== this.scene) { objectToDemolish = objectToDemolish.parent; } this.removeObject(objectToDemolish, true); } },
-    addRoadObjectToScene: function(roadObject) { roadObject.userData.isPowered = false; roadObject.userData.powerRadius = this.gridSize * 0.6; roadObject.userData.consumption = 0.1 * (roadObject.userData.points?.length || 1); this.scene.add(roadObject); this.cityObjects.push(roadObject); this.powerConnectors.push(roadObject); },
+    demolishObject: function() { this.raycaster.setFromCamera(this.mouse, this.camera); const intersects = this.raycaster.intersectObjects(this.cityObjects, true); if (intersects.length > 0) { let objectToDemolish = intersects[0].object; while (objectToDemolish.parent && objectToDemolish.parent !== this.scene) { objectToDemolish = objectToDemolish.parent; } const wasRoad = objectToDemolish.userData.type === 'road'; this.removeObject(objectToDemolish, true); if (wasRoad) { this.buildRoadGraph(); } } },
+    addRoadObjectToScene: function(roadObject) { roadObject.userData.isPowered = false; roadObject.userData.powerRadius = this.gridSize * 0.6; roadObject.userData.consumption = 0.1 * (roadObject.userData.points?.length || 1); this.scene.add(roadObject); this.cityObjects.push(roadObject); this.powerConnectors.push(roadObject); this.buildRoadGraph(); },
     recalculateAllRoadAdjacency: function() { this.initializeLogicalGrid(); this.cityObjects.forEach(obj => { if (obj.userData.type?.startsWith('road')) { const points = obj.userData.points; if(points) { points.forEach(p => this.markGridCellsAroundPoint(p)); } } }); },
     worldToGridCoords: function(worldPos) { if (!worldPos) return null; const gridX = Math.floor((worldPos.x + this.gridWorldSize / 2) / this.gridSize); const gridZ = Math.floor((worldPos.z + this.gridWorldSize / 2) / this.gridSize); if (gridX >= 0 && gridX < this.gridCells && gridZ >= 0 && gridZ < this.gridCells) { return { x: gridX, z: gridZ }; } return null; },
     markGridCellsAroundPoint: function(point) { const coords = this.worldToGridCoords(point); if (coords) { for(let i=-1; i<=1; i++){ for(let j=-1; j<=1; j++){ const nx = coords.x + i, nz = coords.z + j; if(nx >= 0 && nx < this.gridCells && nz >= 0 && nz < this.gridCells) { const isRoadCell = (i===0 && j===0); if(isRoadCell) { this.logicalGrid[nx][nz] = 1; } else if (this.logicalGrid[nx][nz] === 0) { this.logicalGrid[nx][nz] = 2; } } } } } },
 
     // ==================================================================
-    // FUNÇÃO CORRIGIDA - updatePowerGrid
-    // Esta função foi completamente reescrita para corrigir um erro crítico.
-    // Agora, ela corretamente calcula a distância para/de linhas de transmissão
-    // (verificando a posição dos postes, não do grupo) e também lida
-    // de forma mais robusta com a energização de estradas.
+    // FUNÇÃO DE ATUALIZAÇÃO DA REDE ELÉTRICA CORRIGIDA
     // ==================================================================
     updatePowerGrid: function() {
         const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
@@ -291,8 +397,217 @@ const Game = {
     toggleWaterOverlay: function() { this.waterOverlay.visible = !this.waterOverlay.visible; this.powerOverlay.visible = false; this.waterConnectors.forEach(p => p.visible = this.waterOverlay.visible); },
     updateWaterGrid: function() { this.waterOverlay.clear(); const consumers = this.powerConsumers; const allWaterObjects = [...this.waterProducers, ...this.waterConnectors, ...this.sewageProcessors, ...consumers]; consumers.forEach(c => { c.userData.hasWater = false; c.userData.hasSewage = false; }); this.waterConnectors.forEach(p => {p.material.color.set(0x333333);}); let waterQueue = [...this.waterProducers]; let waterHead = 0; const waterColor = new THREE.Color(0x00aaff); while(waterHead < waterQueue.length) { const source = waterQueue[waterHead++]; const radius = source.userData.connectionRadius; this.waterConnectors.forEach(pipe => { if (pipe.material.color.equals(waterColor)) return; if(pipe.position.distanceTo(source.position) < radius) { pipe.material.color.set(waterColor); waterQueue.push(pipe); } }); consumers.forEach(c => { if (!c.userData.hasWater && c.position.distanceTo(source.position) < radius) c.userData.hasWater = true; }); } let sewageQueue = [...this.sewageProcessors]; let sewageHead = 0; const sewageColor = new THREE.Color(0x8fce00); const mixedColor = new THREE.Color(0x4a736a); while(sewageHead < sewageQueue.length) { const source = sewageQueue[sewageHead++]; const radius = source.userData.connectionRadius; this.waterConnectors.forEach(pipe => { if (pipe.position.distanceTo(source.position) < radius) { if (pipe.material.color.equals(sewageColor) || pipe.material.color.equals(mixedColor)) return; if (pipe.material.color.equals(waterColor)) pipe.material.color.set(mixedColor); else pipe.material.color.set(sewageColor); sewageQueue.push(pipe); } }); consumers.forEach(c => { if (!c.userData.hasSewage && c.position.distanceTo(source.position) < radius) c.userData.hasSewage = true; }); } consumers.forEach(c => { this.toggleNoWaterIcon(c, !c.userData.hasWater || !c.userData.hasSewage); }); const allServiceBuildings = [...this.waterProducers, ...this.sewageProcessors]; allServiceBuildings.forEach(b => { const circleGeo = new THREE.CircleGeometry(b.userData.connectionRadius, 32); const circleMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.2, side:THREE.DoubleSide }); const circleMesh = new THREE.Mesh(circleGeo, circleMat); circleMesh.position.copy(b.position).y = this.getTerrainHeight(b.position.x, b.position.z) + 0.1; circleMesh.rotation.x = -Math.PI / 2; this.waterOverlay.add(circleMesh); }); },
     toggleNoWaterIcon: function(building, show) { let icon = building.getObjectByName("noWaterIcon"); if (show && !icon) { if (!this.noWaterTexture) this.noWaterTexture = new THREE.TextureLoader().load('assets/no_water_icon.png'); const material = new THREE.SpriteMaterial({ map: this.noWaterTexture, color: 0x00aaff }); icon = new THREE.Sprite(material); icon.name = "noWaterIcon"; icon.scale.set(8, 8, 8); icon.position.y = (building.geometry?.parameters.height || this.gridSize) + 5; if (building.getObjectByName("noPowerIcon")) icon.position.x = 8; building.add(icon); } else if (!show && icon) { building.remove(icon); } },
-    spawnVehicle: function() { const unoccupiedHouses = this.powerConsumers.filter(c => c.userData.type === 'consumer' && !c.userData.isOccupied); const commercialBuildings = this.cityObjects.filter(c => c.userData.type === 'commercial'); if (unoccupiedHouses.length === 0 || commercialBuildings.length === 0) return; const entryRoad = this.cityObjects.find(o => o.userData.type === 'road' && o.userData.curve.points[0].z > this.gridWorldSize / 2 - 5); if (!entryRoad) return; const carColors = [0xcf1b1b, 0x1b58cf, 0xcfc81b, 0x1bcf5a, 0xcf6b1b, 0xffffff, 0x333333]; const geo = new THREE.BoxGeometry(2.5, 2, 4.5); const mat = new THREE.MeshLambertMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)] }); const car = new THREE.Mesh(geo, mat); this.vehicles.push({ mesh: car, path: entryRoad.userData.curve, progress: 0, speed: 0.0005 + Math.random() * 0.0008 }); this.scene.add(car); },
-    updateVehicles: function(deltaTime) { for (let i = this.vehicles.length - 1; i >= 0; i--) { const v = this.vehicles[i]; v.progress += v.speed * deltaTime * 100; if (v.progress >= 1) { this.scene.remove(v.mesh); this.vehicles.splice(i, 1); this.handleArrival(); continue; } const pos = v.path.getPointAt(v.progress); v.mesh.position.copy(pos).y += 1.2; const tangent = v.path.getTangentAt(v.progress); v.mesh.lookAt(pos.clone().add(tangent)); } },
-    handleArrival: function() { const house = this.powerConsumers.find(c => c.userData.type === 'consumer' && !c.userData.isOccupied); if (house) { house.userData.isOccupied = true; house.material.color.set(house.userData.originalColor.clone().multiplyScalar(0.6)); this.population++; this.updatePopulationUI(); } },
-    animate: function(time) { requestAnimationFrame(this.animate); const deltaTime = (time - this.lastTime) / 1000; this.lastTime = time; if (!this.isInitialized) return; const { x, z } = this.moveDirection; if (x !== 0 || z !== 0) { if (this.cameraMode === 'move') { this.cameraPivot.translateX(x * this.moveSpeed); this.cameraPivot.translateZ(z * this.moveSpeed); } else { this.cameraPivot.rotateY(-x * this.rotateSpeed); const newRotX = this.camera.rotation.x - z * this.rotateSpeed; if (newRotX > -1.2 && newRotX < 1.2) this.camera.rotation.x = newRotX; } } const boundary = this.gridWorldSize / 2 - 20; this.cameraPivot.position.x = THREE.MathUtils.clamp(this.cameraPivot.position.x, -boundary, boundary); this.cameraPivot.position.z = THREE.MathUtils.clamp(this.cameraPivot.position.z, -boundary, boundary); if (time - this.lastSpawnTime > 4000) { if(Math.random() < 0.5) this.spawnVehicle(); this.lastSpawnTime = time; } this.updateVehicles(deltaTime || 0); this.renderer.render(this.scene, this.camera); }
+
+    // ==================================================================
+    // NOVAS FUNÇÕES PARA PATHFINDING DE VEÍCULOS
+    // ==================================================================
+    buildRoadGraph: function() {
+        this.roadGraph = { nodes: {}, edges: {} };
+        const roads = this.cityObjects.filter(obj => obj.userData.type === 'road');
+        const nodePoints = [];
+        roads.forEach(road => {
+            const points = road.userData.points;
+            if (points && points.length > 0) {
+                nodePoints.push({ point: points[0], road: road });
+                nodePoints.push({ point: points[points.length - 1], road: road });
+            }
+        });
+        let nodeIdCounter = 0;
+        while (nodePoints.length > 0) {
+            const currentNode = nodePoints.shift();
+            const nodeId = `node_${nodeIdCounter++}`;
+            const cluster = [currentNode];
+            this.roadGraph.nodes[nodeId] = { id: nodeId, pos: currentNode.point, roads: [currentNode.road] };
+            for (let i = nodePoints.length - 1; i >= 0; i--) {
+                if (currentNode.point.distanceTo(nodePoints[i].point) < 2.0) {
+                    const closeNode = nodePoints.splice(i, 1)[0];
+                    cluster.push(closeNode);
+                    this.roadGraph.nodes[nodeId].roads.push(closeNode.road);
+                }
+            }
+        }
+        roads.forEach(road => {
+            const points = road.userData.points;
+            const startPos = points[0];
+            const endPos = points[points.length - 1];
+            const startNode = this.findClosestRoadNode(startPos);
+            const endNode = this.findClosestRoadNode(endPos);
+            if (startNode && endNode && startNode.id !== endNode.id) {
+                const length = road.userData.curve.getLength();
+                if (!this.roadGraph.edges[startNode.id]) this.roadGraph.edges[startNode.id] = [];
+                if (!this.roadGraph.edges[endNode.id]) this.roadGraph.edges[endNode.id] = [];
+                this.roadGraph.edges[startNode.id].push({ to: endNode.id, road: road, weight: length });
+                this.roadGraph.edges[endNode.id].push({ to: startNode.id, road: road, weight: length });
+            }
+        });
+    },
+    findClosestRoadNode: function(position) {
+        let closestNode = null;
+        let minDistance = Infinity;
+        for (const nodeId in this.roadGraph.nodes) {
+            const node = this.roadGraph.nodes[nodeId];
+            const distance = position.distanceTo(node.pos);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestNode = node;
+            }
+        }
+        return closestNode;
+    },
+    findPath: function(startNodeId, endNodeId) {
+        const distances = {};
+        const prev = {};
+        const pq = new Set();
+        for (const nodeId in this.roadGraph.nodes) {
+            distances[nodeId] = Infinity;
+            prev[nodeId] = null;
+            pq.add(nodeId);
+        }
+        distances[startNodeId] = 0;
+        while (pq.size > 0) {
+            let u = null;
+            pq.forEach(nodeId => {
+                if (u === null || distances[nodeId] < distances[u]) {
+                    u = nodeId;
+                }
+            });
+            if (u === endNodeId) break;
+            pq.delete(u);
+            const neighbors = this.roadGraph.edges[u] || [];
+            for (const edge of neighbors) {
+                const v = edge.to;
+                const alt = distances[u] + edge.weight;
+                if (alt < distances[v]) {
+                    distances[v] = alt;
+                    prev[v] = { from: u, road: edge.road };
+                }
+            }
+        }
+        const path = [];
+        let current = endNodeId;
+        while (prev[current]) {
+            path.unshift(prev[current].road);
+            current = prev[current].from;
+        }
+        return path;
+    },
+    
+    // ==================================================================
+    // FUNÇÕES DE VEÍCULO ATUALIZADAS
+    // ==================================================================
+    spawnVehicle: function() {
+        const unoccupiedHouses = this.cityObjects.filter(c => c.userData.type === 'consumer' && c.userData.isPowered && !c.userData.isOccupied);
+        const commercialBuildings = this.cityObjects.filter(c => c.userData.type === 'commercial' && c.userData.isPowered);
+        if (unoccupiedHouses.length === 0 || commercialBuildings.length === 0) return;
+
+        const connectingRoad = this.cityObjects.find(o => 
+            o.userData.type === 'road' && o.userData.points[0].z > this.gridWorldSize * 0.4
+        );
+        if (!connectingRoad) return;
+
+        const spawnPoint = connectingRoad.userData.points[0];
+        const destinationHouse = unoccupiedHouses[0];
+        const startNode = this.findClosestRoadNode(spawnPoint);
+        const endNode = this.findClosestRoadNode(destinationHouse.position);
+
+        if (!startNode || !endNode) return;
+
+        const pathOfRoads = this.findPath(startNode.id, endNode.id);
+        if (pathOfRoads.length === 0) return;
+
+        if (pathOfRoads[0] !== connectingRoad) {
+            pathOfRoads.unshift(connectingRoad);
+        }
+        
+        const carColors = [0xcf1b1b, 0x1b58cf, 0xcfc81b, 0x1bcf5a, 0xcf6b1b, 0xffffff, 0x333333];
+        const geo = new THREE.BoxGeometry(2.5, 2, 4.5);
+        const mat = new THREE.MeshLambertMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)] });
+        const car = new THREE.Mesh(geo, mat);
+        
+        destinationHouse.userData.isOccupied = true; 
+        
+        this.vehicles.push({
+            mesh: car,
+            path: pathOfRoads,
+            pathIndex: 0,
+            progress: 0,
+            speed: 0.0005 + Math.random() * 0.0008,
+            destination: destinationHouse
+        });
+        this.scene.add(car);
+    },
+    updateVehicles: function(deltaTime) {
+        for (let i = this.vehicles.length - 1; i >= 0; i--) {
+            const v = this.vehicles[i];
+            const currentRoad = v.path[v.pathIndex];
+            if (!currentRoad) {
+                 this.scene.remove(v.mesh);
+                 this.vehicles.splice(i, 1);
+                 continue;
+            }
+            v.progress += v.speed * deltaTime * 100;
+            if (v.progress >= 1) {
+                v.pathIndex++;
+                v.progress = 0;
+                if (v.pathIndex >= v.path.length) {
+                    this.scene.remove(v.mesh);
+                    this.vehicles.splice(i, 1);
+                    this.handleArrival(v.destination);
+                    continue;
+                }
+            }
+            const currentCurve = currentRoad.userData.curve;
+            const pos = currentCurve.getPointAt(v.progress);
+            v.mesh.position.copy(pos).y += 1.2;
+            const tangent = currentCurve.getTangentAt(v.progress);
+            v.mesh.lookAt(pos.clone().add(tangent));
+        }
+    },
+    updateDecorativeVehicles: function() {
+        const halfSize = this.gridWorldSize / 2 + 30;
+        this.decorativeVehicles.forEach(v => {
+            v.mesh.position.x += v.speed;
+            if (v.speed > 0 && v.mesh.position.x > halfSize) {
+                v.mesh.position.x = -halfSize;
+            } else if (v.speed < 0 && v.mesh.position.x < -halfSize) {
+                v.mesh.position.x = halfSize;
+            }
+        });
+    },
+    handleArrival: function(house) {
+        if (house) {
+            house.material.color.set(house.userData.originalColor.clone().multiplyScalar(0.6));
+            this.population++;
+            this.updatePopulationUI();
+        }
+    },
+    animate: function(time) {
+        requestAnimationFrame(this.animate);
+        const deltaTime = (time - this.lastTime) / 1000;
+        this.lastTime = time;
+        if (!this.isInitialized) return;
+        const { x, z } = this.moveDirection;
+        if (x !== 0 || z !== 0) {
+            if (this.cameraMode === 'move') {
+                this.cameraPivot.translateX(x * this.moveSpeed);
+                this.cameraPivot.translateZ(z * this.moveSpeed);
+            } else {
+                this.cameraPivot.rotateY(-x * this.rotateSpeed);
+                const newRotX = this.camera.rotation.x - z * this.rotateSpeed;
+                if (newRotX > -1.2 && newRotX < 1.2) this.camera.rotation.x = newRotX;
+            }
+        }
+        const boundary = this.gridWorldSize / 2 - 20;
+        this.cameraPivot.position.x = THREE.MathUtils.clamp(this.cameraPivot.position.x, -boundary, boundary);
+        this.cameraPivot.position.z = THREE.MathUtils.clamp(this.cameraPivot.position.z, -boundary, boundary);
+        
+        if (time - this.lastSpawnTime > 4000) { // Tenta gerar um carro a cada 4 segundos
+            this.spawnVehicle();
+            this.lastSpawnTime = time;
+        }
+        
+        this.updateVehicles(deltaTime || 0);
+        this.updateDecorativeVehicles();
+        this.renderer.render(this.scene, this.camera);
+    }
 };
