@@ -65,6 +65,7 @@ const Game = {
         this.gridCells = this.gridWorldSize / this.gridSize;
         this.initializeLogicalGrid();
         this.setupScene();
+        this.createInitialHighway(); // <- NOVO: Cria a rodovia inicial
         this.setupControls();
         this.animate = this.animate.bind(this);
         this.animate();
@@ -100,7 +101,7 @@ const Game = {
         dirLight.position.set(50, 100, 25);
         this.scene.add(dirLight);
 
-        this.terrainMesh = this.createIslandTerrain();
+        this.terrainMesh = this.createIslandTerrain(); // <- MODIFICADO para ser península
         this.terrainMesh.userData.isGround = true;
         this.scene.add(this.terrainMesh);
 
@@ -138,6 +139,7 @@ const Game = {
         this.scene.add(this.powerOverlay);
     },
 
+    // ===== FUNÇÃO MODIFICADA PARA CRIAR UMA PENÍNSULA =====
     createIslandTerrain: function() {
         const segments = 128;
         const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments);
@@ -157,7 +159,7 @@ const Game = {
 
         for (let i = 0; i < vertices.count; i++) {
             const x = vertices.getX(i);
-            const z = vertices.getY(i);
+            const z = vertices.getY(i); // Em PlaneGeometry, a coordenada Z do mundo está em 'y'
             
             let noise = 0;
             let frequency = 2.0 / this.gridWorldSize;
@@ -168,12 +170,19 @@ const Game = {
                 amplitude /= 2.0;
             }
 
+            // Falloff circular padrão para criar uma ilha
             const dist = center.distanceTo(new THREE.Vector2(x, z));
-            const falloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.5);
-
-            let height = (baseHeight + noise) * falloff;
+            const islandFalloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.5);
             
-            vertices.setZ(i, height);
+            // NOVO: Falloff linear para criar a conexão com o continente na borda Z positiva
+            const continentFalloff = THREE.MathUtils.smoothstep(z, maxDist * 0.2, maxDist);
+            
+            // Combina os dois falloffs, pegando o valor mais alto. Isso mantém a borda Z alta.
+            const combinedFalloff = Math.max(islandFalloff, continentFalloff);
+
+            let height = (baseHeight + noise) * combinedFalloff;
+            
+            vertices.setZ(i, height); // A altura do terreno é o eixo Z do vértice no BufferGeometry
 
             if (height < 6) {
                 colors.push(sandColor.r, sandColor.g, sandColor.b);
@@ -193,6 +202,16 @@ const Game = {
         const mesh = new THREE.Mesh(geometry, material);
         mesh.rotation.x = -Math.PI / 2;
         return mesh;
+    },
+    
+    // ===== NOVA FUNÇÃO PARA CRIAR A RODOVIA INICIAL =====
+    createInitialHighway: function() {
+        const halfSize = this.gridWorldSize / 2;
+        // Começa na borda do "continente" e vai até um pouco para dentro do mapa
+        const startPoint = new THREE.Vector3(0, 0, halfSize -1); // Começa na borda
+        const endPoint = new THREE.Vector3(0, 0, -50);        // Termina perto do centro
+        
+        this.createRoadSegment(startPoint, endPoint);
     },
     
     setBuildMode: function(mode) {
@@ -404,65 +423,56 @@ const Game = {
         this.currentCurvePoints = [];
     },
     
-    // CORREÇÃO: Função de criação de estrada refeita para gerar a malha manualmente.
+    // ===== FUNÇÃO CORRIGIDA PARA ADICIONAR A ESTRADA À CENA IMEDIATAMENTE =====
     createRoadObject: function(points) {
         const pointsWithTerrainHeight = points.map(p => {
             const point = p.clone();
-            // Adiciona um pequeno offset para garantir que a estrada fique sobre o terreno
             point.y = this.getTerrainHeight(p.x, p.z) + 0.1; 
             return point;
         });
 
         const curve = new THREE.CatmullRomCurve3(pointsWithTerrainHeight);
-        // Pega pontos suficientes ao longo da curva para uma boa resolução
         const curvePoints = curve.getPoints(Math.max(50, Math.floor(curve.getLength() * 1.5)));
         const roadWidth = this.gridSize * 0.8;
 
         const roadVertices = [];
         const roadIndices = [];
-        const up = new THREE.Vector3(0, 1, 0); // Define a direção "para cima"
+        const up = new THREE.Vector3(0, 1, 0);
 
-        // Itera por cada ponto da curva para criar um "tapete" de vértices
         for (let i = 0; i < curvePoints.length; i++) {
             const point = curvePoints[i];
             const tangent = curve.getTangentAt(i / (curvePoints.length - 1));
-            
-            // Calcula um vetor lateral, perpendicular à direção da estrada e ao vetor "up"
             const side = new THREE.Vector3().crossVectors(tangent, up).normalize();
-
-            // Cria os vértices esquerdo e direito da estrada
             const v1 = point.clone().add(side.clone().multiplyScalar(roadWidth / 2));
             const v2 = point.clone().add(side.clone().multiplyScalar(-roadWidth / 2));
-            
             roadVertices.push(v1.x, v1.y, v1.z);
             roadVertices.push(v2.x, v2.y, v2.z);
         }
 
-        // Cria os triângulos (faces) que conectam os vértices
         for (let i = 0; i < curvePoints.length - 1; i++) {
             const p1_prev = i * 2;
             const p2_prev = i * 2 + 1;
             const p1_curr = (i + 1) * 2;
             const p2_curr = (i + 1) * 2 + 1;
-
-            // Primeiro triângulo do segmento
             roadIndices.push(p1_prev, p2_prev, p1_curr);
-            // Segundo triângulo do segmento
             roadIndices.push(p2_prev, p2_curr, p1_curr);
         }
 
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(roadVertices, 3));
         geo.setIndex(roadIndices);
-        geo.computeVertexNormals(); // Calcula as normais para iluminação correta
+        geo.computeVertexNormals();
 
         const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const mesh = new THREE.Mesh(geo, mat);
         
         mesh.userData = { 
             type: 'road-unified', 
-            points: curvePoints // Salva os pontos para terraplanagem e interseções
+            points: curvePoints
         };
+        
+        // Adiciona a estrada à cena ANTES de verificar interseções.
+        this.addRoadObjectToScene(mesh);
         
         this.terraformArea(mesh);
         this.checkForAndProcessIntersections(mesh);
@@ -651,14 +661,15 @@ const Game = {
         }
     },
 
+    // ===== FUNÇÃO CORRIGIDA PARA NÃO ADICIONAR A ESTRADA DUAS VEZES =====
     checkForAndProcessIntersections: function(newRoadObject) {
         let intersections = [];
-        const newRoadSegments = this.getRoadSegments(newRoadObject);
         const roadsToCheck = this.cityObjects.filter(obj => obj.userData.type?.startsWith('road'));
 
         for (const existingRoad of roadsToCheck) {
             if (existingRoad === newRoadObject) continue;
             const existingRoadSegments = this.getRoadSegments(existingRoad);
+            const newRoadSegments = this.getRoadSegments(newRoadObject);
             for (const newSeg of newRoadSegments) {
                 for (const existingSeg of existingRoadSegments) {
                     const intersectionPoint = this.lineSegmentIntersection(newSeg.p1, newSeg.p2, existingSeg.p1, existingSeg.p2);
@@ -692,9 +703,8 @@ const Game = {
                     }
                 }
             });
-        } else {
-            this.addRoadObjectToScene(newRoadObject);
         }
+        // O bloco 'else' que adicionava a estrada foi removido, pois ela já é adicionada em createRoadObject.
     },
     
     addRoadObjectToScene: function(roadObject) {
@@ -911,6 +921,7 @@ const Game = {
         this.powerOverlay.visible = !this.powerOverlay.visible;
     },
     
+    // ===== FUNÇÃO MODIFICADA COM LIMITES DE CÂMERA =====
     animate: function() {
         requestAnimationFrame(this.animate);
         const { x, z } = this.moveDirection;
@@ -924,6 +935,12 @@ const Game = {
                 if (newRotX > -1.2 && newRotX < 1.2) this.camera.rotation.x = newRotX;
             }
         }
+        
+        // NOVO: Adiciona limites para a câmera não sair do mapa
+        const boundary = this.gridWorldSize / 2 - 20; // 20 é um buffer da borda
+        this.cameraPivot.position.x = THREE.MathUtils.clamp(this.cameraPivot.position.x, -boundary, boundary);
+        this.cameraPivot.position.z = THREE.MathUtils.clamp(this.cameraPivot.position.z, -boundary, boundary);
+        
         if(this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
