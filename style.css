@@ -41,3 +41,17 @@ body { background-image: url('assets/background.jpg'); background-size: cover; b
 .log-entry { margin: 2px 0; }
 .log-info { color: #f1f1f1; }
 .log-error { color: #ff4757; font-weight: bold; }
+
+/* Adicione isso ao final do seu style.css */
+#info-bar {
+    background-color: rgba(18, 16, 36, 0.8);
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    color: #00ffaa;
+    font-weight: 600;
+}
+#info-bar.shortage {
+    color: #ff4757;
+    border-color: #ff4757;
+}
