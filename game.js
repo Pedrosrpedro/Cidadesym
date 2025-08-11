@@ -1,38 +1,26 @@
 // game.js
-
 const Game = {
     isInitialized: false, buildMode: 'select', cameraMode: 'move',
-    scene: null, camera: null, renderer: null, cameraPivot: null, mapPlane: null,
+    scene: null, camera: null, renderer: null, mapPlane: null,
     buildCursor: null, raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(),
     joystick: null, moveDirection: { x: 0, z: 0 }, moveSpeed: 0.5, rotateSpeed: 0.02,
-    gridSize: 10, isDrawingRoad: false, roadStartPoint: null,
+    gridSize: 10, isDrawing: false, startPoint: null,
 
+    // NOVO: Gerenciamento da cidade e da rede elétrica
+    cityObjects: [],
+    powerProducers: [],
+    powerConsumers: [],
+    powerLines: [],
+    powerOverlay: null,
+    lastGridUpdateTime: 0,
+    
     init: function() {
         if (this.isInitialized) return;
-        DebugConsole.log("Game.init: Iniciando...");
-
-        if (typeof THREE === 'undefined') { DebugConsole.error("Game.init: Three.js NÃO está carregado!"); return; }
-        DebugConsole.log("Game.init: Three.js OK.");
-        if (typeof nipplejs === 'undefined') { DebugConsole.error("Game.init: NippleJS NÃO está carregado!"); return; }
-        DebugConsole.log("Game.init: NippleJS OK.");
-
-        try {
-            DebugConsole.log("Game.init: Chamando setupScene...");
-            this.setupScene();
-            DebugConsole.log("Game.init: setupScene concluído.");
-
-            DebugConsole.log("Game.init: Chamando setupControls...");
-            this.setupControls();
-            DebugConsole.log("Game.init: setupControls concluído.");
-
-            this.animate = this.animate.bind(this);
-            this.animate();
-            
-            this.isInitialized = true;
-            DebugConsole.log("Game.init: JOGO INICIADO COM SUCESSO!");
-        } catch (err) {
-            DebugConsole.error("Game.init: ERRO CRÍTICO durante a inicialização: " + err.stack);
-        }
+        this.setupScene();
+        this.setupControls();
+        this.animate = this.animate.bind(this);
+        this.animate();
+        this.isInitialized = true;
     },
     
     setupScene: function() {
@@ -44,7 +32,7 @@ const Game = {
 
         this.cameraPivot = new THREE.Object3D(); this.scene.add(this.cameraPivot);
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 50, 50); this.camera.lookAt(this.cameraPivot.position);
+        this.camera.position.set(0, 80, 50); this.camera.lookAt(this.cameraPivot.position);
         this.cameraPivot.add(this.camera);
 
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
@@ -58,12 +46,17 @@ const Game = {
         const cursorMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
         this.buildCursor = new THREE.Mesh(cursorGeo, cursorMat);
         this.buildCursor.visible = false; this.scene.add(this.buildCursor);
+
+        // Cria o grupo para o overlay de energia
+        this.powerOverlay = new THREE.Group();
+        this.powerOverlay.visible = false;
+        this.scene.add(this.powerOverlay);
     },
 
     setBuildMode: function(mode) {
         this.buildMode = mode;
         this.buildCursor.visible = (mode !== 'select');
-        this.isDrawingRoad = false; this.roadStartPoint = null;
+        this.isDrawing = false; this.startPoint = null;
     },
 
     setupControls: function() {
@@ -82,7 +75,6 @@ const Game = {
 
         const canvas = this.renderer.domElement;
         canvas.addEventListener('mousemove', (e) => this.updateCursor(e.clientX, e.clientY));
-        canvas.addEventListener('touchmove', (e) => { if (e.touches.length > 0) this.updateCursor(e.touches[0].clientX, e.touches[0].clientY); });
         canvas.addEventListener('click', () => this.handleMapClick());
     },
     
@@ -98,60 +90,126 @@ const Game = {
     },
     
     handleMapClick: function() {
-        if (this.buildMode.startsWith('road')) this.handleRoadPlacement();
-        else this.placeObject();
-    },
-
-    handleRoadPlacement: function() {
-        if (!this.isDrawingRoad) {
-            this.roadStartPoint = this.buildCursor.position.clone();
-            this.isDrawingRoad = true;
+        if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) {
+            this.handleLinePlacement();
         } else {
-            this.createRoadSegment(this.roadStartPoint, this.buildCursor.position.clone());
-            this.isDrawingRoad = false; this.roadStartPoint = null;
+            this.placeObject();
         }
     },
 
-    createRoadSegment: function(start, end) {
-        const roadPath = new THREE.Vector3().subVectors(end, start);
-        const roadLength = roadPath.length();
-        if(roadLength === 0) return;
-        const roadGeo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, roadLength);
-        const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshLambertMaterial({ color: 0x444444 }));
-        roadMesh.position.copy(start).add(roadPath.multiplyScalar(0.5));
-        roadMesh.lookAt(end);
-        this.scene.add(roadMesh);
+    handleLinePlacement: function() {
+        if (!this.isDrawing) {
+            this.startPoint = this.buildCursor.position.clone();
+            this.isDrawing = true;
+        } else {
+            this.createLineSegment(this.startPoint, this.buildCursor.position.clone());
+            this.isDrawing = false; this.startPoint = null;
+        }
+    },
+
+    createLineSegment: function(start, end) {
+        const path = new THREE.Vector3().subVectors(end, start);
+        const length = path.length();
+        if(length === 0) return;
+
+        let geo, mat;
+        if (this.buildMode.startsWith('road')) {
+            geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
+            mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        } else { // power-line
+            geo = new THREE.CylinderGeometry(0.5, 0.5, length, 6);
+            mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Cor de madeira
+        }
+        
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(start).add(path.multiplyScalar(0.5));
+        mesh.lookAt(end);
+        
+        this.scene.add(mesh);
+        this.cityObjects.push(mesh);
+        if (this.buildMode === 'power-line') this.powerLines.push(mesh);
+        
+        this.updatePowerGrid();
     },
     
     placeObject: function() {
         if (!this.buildCursor.visible || this.buildMode === 'select') return;
-        let newObject, height = 0;
+        let newObject, height = 0, objectData = { isPowered: false };
+        const position = this.buildCursor.position.clone();
+        
         switch (this.buildMode) {
             case 'residential':
                 height = this.gridSize;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: 0x34A853 }));
+                objectData.type = 'consumer'; this.powerConsumers.push(newObject);
                 break;
             case 'commercial':
                 height = this.gridSize * 1.5;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: 0x4285F4 }));
+                objectData.type = 'consumer'; this.powerConsumers.push(newObject);
                 break;
             case 'power-wind':
                 height = this.gridSize * 2.5;
                 newObject = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, height, 8), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
+                objectData.type = 'producer'; objectData.powerRadius = 40; this.powerProducers.push(newObject);
                 break;
             case 'power-coal':
                 height = this.gridSize * 1.2;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize*2, height, this.gridSize*1.5), new THREE.MeshLambertMaterial({ color: 0x555555 }));
-                break;
-            case 'power-solar':
-                height = 0.4;
-                newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize*3, height, this.gridSize*3), new THREE.MeshLambertMaterial({ color: 0x1a237e }));
+                objectData.type = 'producer'; objectData.powerRadius = 75; this.powerProducers.push(newObject);
                 break;
             default: return;
         }
-        newObject.position.copy(this.buildCursor.position);
+        
+        newObject.position.copy(position);
         newObject.position.y = height / 2;
+        newObject.userData = objectData;
+        
         this.scene.add(newObject);
+        this.cityObjects.push(newObject);
+        this.updatePowerGrid();
+    },
+
+    updatePowerGrid: function() {
+        console.log("Atualizando rede elétrica...");
+        // Resetar todos
+        this.powerConsumers.forEach(c => { c.userData.isPowered = false; c.material.color.set(0x808080); });
+        this.powerLines.forEach(l => { l.userData.isPowered = false; });
+        this.powerOverlay.clear();
+        
+        // Energizar a partir das usinas
+        this.powerProducers.forEach(producer => {
+            const radius = producer.userData.powerRadius;
+            // Adiciona o círculo azul ao overlay
+            const circleGeo = new THREE.CircleGeometry(radius, 32);
+            const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
+            const circleMesh = new THREE.Mesh(circleGeo, circleMat);
+            circleMesh.position.copy(producer.position);
+            circleMesh.position.y = 0.1;
+            circleMesh.rotation.x = -Math.PI / 2;
+            this.powerOverlay.add(circleMesh);
+
+            // Energiza consumidores e linhas no raio
+            [...this.powerConsumers, ...this.powerLines].forEach(obj => {
+                if (obj.position.distanceTo(producer.position) < radius) {
+                    obj.userData.isPowered = true;
+                }
+            });
+        });
+        
+        // TODO: Propagar energia pelas linhas (lógica mais complexa para o futuro)
+
+        // Atualiza a cor dos consumidores
+        this.powerConsumers.forEach(c => {
+            if (c.userData.isPowered) {
+                if(c.userData.type === 'residential') c.material.color.set(0x34A853);
+                else c.material.color.set(0x4285F4);
+            }
+        });
+    },
+    
+    togglePowerOverlay: function() {
+        this.powerOverlay.visible = !this.powerOverlay.visible;
     },
     
     animate: function() {
@@ -166,6 +224,8 @@ const Game = {
                 if (newRotX > -1.2 && newRotX < 1.2) this.camera.rotation.x = newRotX;
             }
         }
-        this.renderer.render(this.scene, this.camera);
+        if(this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 };
