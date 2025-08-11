@@ -20,7 +20,7 @@
                 <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
             </ul>
         </nav>
-        <div class="version"><span>v1.4.0 (Eletricidade)</span></div>
+        <div class="version"><span>v1.5.0 (Estável)</span></div>
     </div>
 
     <!-- Container do Jogo -->
@@ -28,7 +28,6 @@
         <div id="game-hud-top">
              <button id="exit-game-btn">Voltar ao Menu</button>
              <button id="camera-mode-btn">[Mover]</button>
-             <!-- NOVO: Botão para visualizar a rede elétrica -->
              <button id="power-overlay-btn">Rede Elétrica</button>
         </div>
         <div id="joystick-zone"></div>
@@ -43,7 +42,6 @@
             <button class="ui-button main-tool-btn" data-panel="panel-zoning">Zonas</button>
             <button class="ui-button" id="btn-demolish">Demolir</button>
         </div>
-        <!-- Painéis de sub-menu ... -->
         <div id="panel-roads" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="road-straight">Rua Simples</button>
         </div>
@@ -57,8 +55,16 @@
             <button class="ui-button" data-build-mode="commercial">Zona Comercial</button>
         </div>
     </div>
+    
+    <!-- Console de Debug -->
+    <button id="debug-toggle-btn">Console</button>
+    <div id="debug-console-container" class="hidden">
+        <div id="debug-header"><h3>Console de Debug</h3></div>
+        <div id="debug-log"></div>
+    </div>
 
-    <!-- Scripts -->
+    <!-- Scripts (Ordem Corrigida e Final) -->
+    <script src="console.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     <script src="ui.js"></script>
