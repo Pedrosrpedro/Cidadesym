@@ -18,7 +18,7 @@
                 <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
             </ul>
         </nav>
-        <span class="version">v1.6.0</span>
+        <span class="version">v1.7.0</span> <!-- Versão atualizada -->
     </div>
 
     <!-- Container do Jogo -->
@@ -47,9 +47,13 @@
         </div>
          <div id="panel-transport" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="road">Estrada Reta</button>
-            <!-- NOVO BOTÃO -->
             <button class="ui-button" data-build-mode="road-curved">Estrada Curva</button>
             <button class="ui-button" data-build-mode="power-line">Postes</button>
+        </div>
+        <!-- NOVO PAINEL DE TERRAFORMAR -->
+        <div id="panel-terrain" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="terraform-raise">Elevar Terreno</button>
+            <button class="ui-button" data-build-mode="terraform-lower">Abaixar Terreno</button>
         </div>
 
         <!-- BARRA PRINCIPAL -->
@@ -58,6 +62,8 @@
             <button class="ui-button main-tool-btn" data-panel="panel-zones">Zonas</button>
             <button class="ui-button main-tool-btn" data-panel="panel-power">Energia</button>
             <button class="ui-button main-tool-btn" data-panel="panel-transport">Transporte</button>
+            <!-- NOVO BOTÃO PRINCIPAL DE TERRAFORMAR -->
+            <button class="ui-button main-tool-btn" data-panel="panel-terrain">Terraformar</button>
             <button id="btn-demolish" class="ui-button">Demolir</button>
         </div>
     </div>
