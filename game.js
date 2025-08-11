@@ -6,30 +6,29 @@ const Game = {
     gridSize: 10, isDrawing: false, startPoint: null,
     
     temporaryPole: null, 
-    
-    // NOVO: Pontos para desenhar estradas curvas
     currentCurvePoints: [],
+    curveGuideMeshes: [],
 
-    // Gerenciamento da cidade e da rede elétrica
+    // Gerenciamento de objetos da cidade
     cityObjects: [],
     powerProducers: [],
     powerConsumers: [],
     powerConnectors: [],
     powerOverlay: null,
     
-    // Gerenciamento de Carga
+    // Gerenciamento de energia
     powerAvailable: 0,
     powerNeeded: 0,
 
-    // NOVO: Grid lógico para gerenciar onde se pode construir
+    // Grid lógico para regras de construção
     logicalGrid: [],
-    gridWorldSize: 500, // Deve ser o mesmo tamanho da mapPlane
-    gridCells: 50,     // gridWorldSize / gridSize
+    gridWorldSize: 500,
+    gridCells: 50,
 
     init: function() {
         if (this.isInitialized) return;
         this.gridCells = this.gridWorldSize / this.gridSize;
-        this.initializeLogicalGrid(); // Inicializa o grid lógico
+        this.initializeLogicalGrid();
         this.setupScene();
         this.setupControls();
         this.animate = this.animate.bind(this);
@@ -38,14 +37,12 @@ const Game = {
         this.updatePowerUI();
     },
     
-    // NOVO: Cria a matriz de dados que representa o mapa
     initializeLogicalGrid: function() {
         this.logicalGrid = [];
         for (let i = 0; i < this.gridCells; i++) {
             this.logicalGrid[i] = [];
             for (let j = 0; j < this.gridCells; j++) {
-                // 0: Vazio, 1: Estrada, 2: Zona construível (adjacente a estrada)
-                this.logicalGrid[i][j] = 0; 
+                this.logicalGrid[i][j] = 0; // 0: Vazio, 1: Estrada, 2: Construível
             }
         }
     },
@@ -82,17 +79,17 @@ const Game = {
     },
 
     setBuildMode: function(mode) {
+        if(this.buildMode === 'road-curved' && this.currentCurvePoints.length > 0) {
+            this.cancelCurvedRoad();
+        }
         this.buildMode = mode;
         this.buildCursor.visible = (mode !== 'select');
         this.isDrawing = false; 
         this.startPoint = null;
-        this.currentCurvePoints = []; // Limpa os pontos da curva ao trocar de modo
-        
         if (this.temporaryPole) {
             this.scene.remove(this.temporaryPole);
             this.temporaryPole = null;
         }
-        // A cor do cursor agora será definida dinamicamente em updateCursor
     },
 
     setupControls: function() {
@@ -103,18 +100,24 @@ const Game = {
             this.moveDirection.x = Math.cos(angle) * force; this.moveDirection.z = -Math.sin(angle) * force;
         }).on('end', () => { this.moveDirection.x = 0; this.moveDirection.z = 0; });
 
-        const modeBtn = document.getElementById('camera-mode-btn');
-        if (modeBtn) modeBtn.addEventListener('click', () => {
+        document.getElementById('camera-mode-btn')?.addEventListener('click', (event) => {
             this.cameraMode = (this.cameraMode === 'move') ? 'rotate' : 'move';
-            modeBtn.textContent = this.cameraMode === 'move' ? '[Mover]' : '[Rotar]';
+            event.target.textContent = this.cameraMode === 'move' ? '[Mover]' : '[Rotar]';
         });
-
+        document.getElementById('power-overlay-btn')?.addEventListener('click', () => this.togglePowerOverlay());
+        
         const canvas = this.renderer.domElement;
         canvas.addEventListener('mousemove', (e) => this.updateCursor(e.clientX, e.clientY));
         canvas.addEventListener('click', () => this.handleMapClick());
+        
+        window.addEventListener('keydown', (e) => {
+            if (this.buildMode === 'road-curved') {
+                if (e.key === 'Enter') this.finalizeCurvedRoad();
+                else if (e.key === 'Escape') this.cancelCurvedRoad();
+            }
+        });
     },
     
-    // ATUALIZADO: O cursor agora muda de cor para indicar se a construção é válida
     updateCursor: function(x, y) {
         if (!this.buildCursor.visible) return;
         this.mouse.x = (x / window.innerWidth) * 2 - 1; this.mouse.y = -(y / window.innerHeight) * 2 + 1;
@@ -127,18 +130,17 @@ const Game = {
             const gridZ = Math.round(pos.z / this.gridSize);
             this.buildCursor.position.set(gridX * this.gridSize, 0.5, gridZ * this.gridSize);
             
-            // Lógica de cor do cursor
             if (this.buildMode === 'residential' || this.buildMode === 'commercial') {
                 const logicalCoords = this.worldToGridCoords(this.buildCursor.position);
                 if (logicalCoords && this.logicalGrid[logicalCoords.x][logicalCoords.z] === 2) {
-                    this.buildCursor.material.color.set(0x00ff00); // Verde: Construção permitida
+                    this.buildCursor.material.color.set(0x00ff00);
                 } else {
-                    this.buildCursor.material.color.set(0xff0000); // Vermelho: Construção proibida
+                    this.buildCursor.material.color.set(0xff0000);
                 }
             } else if (this.buildMode === 'demolish') {
                 this.buildCursor.material.color.set(0xff0000);
             } else {
-                 this.buildCursor.material.color.set(0xffffff); // Branco: Padrão
+                 this.buildCursor.material.color.set(0xffffff);
             }
         }
     },
@@ -155,22 +157,37 @@ const Game = {
 
     handleLinePlacement: function() {
         const currentPos = this.buildCursor.position.clone();
-
-        if (this.buildMode === 'power-line') {
+        
+        if (this.buildMode === 'road-curved') {
+            this.currentCurvePoints.push(currentPos);
+            const guideGeo = new THREE.SphereGeometry(1, 8, 8);
+            const guideMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const guideMesh = new THREE.Mesh(guideGeo, guideMat);
+            guideMesh.position.copy(currentPos);
+            this.scene.add(guideMesh);
+            this.curveGuideMeshes.push(guideMesh);
+        } else if (this.buildMode === 'road') {
+            if (!this.isDrawing) {
+                this.startPoint = currentPos;
+                this.isDrawing = true;
+            } else {
+                this.createRoadSegment(this.startPoint, currentPos);
+                this.isDrawing = false;
+                this.startPoint = null;
+            }
+        } else if (this.buildMode === 'power-line') {
              if (!this.isDrawing) {
                 this.startPoint = currentPos;
                 const poleHeight = 12;
                 const poleGeo = new THREE.CylinderGeometry(0.4, 0.6, poleHeight, 8);
                 const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 });
                 this.temporaryPole = new THREE.Mesh(poleGeo, poleMat);
-                this.temporaryPole.position.copy(this.startPoint);
-                this.temporaryPole.position.y = poleHeight / 2;
+                this.temporaryPole.position.copy(this.startPoint).y = poleHeight / 2;
                 this.scene.add(this.temporaryPole);
                 this.isDrawing = true;
             } else {
                 const endPoint = currentPos;
-                const distance = this.startPoint.distanceTo(endPoint);
-                if (distance > 0) {
+                if (this.startPoint.distanceTo(endPoint) > 0) {
                     this.scene.remove(this.temporaryPole); 
                     this.createPowerLineObject(this.startPoint, endPoint, this.temporaryPole);
                 } else {
@@ -181,132 +198,215 @@ const Game = {
                 this.temporaryPole = null;
             }
         } 
-        else if (this.buildMode === 'road') {
-            if (!this.isDrawing) {
-                this.startPoint = currentPos;
-                this.isDrawing = true;
-            } else {
-                this.createRoadSegment(this.startPoint, currentPos);
-                this.isDrawing = false;
-                this.startPoint = null;
-            }
-        }
-        // NOVO: Lógica inicial para estradas curvas (a ser desenvolvida)
-        else if (this.buildMode === 'road-curved') {
-            console.log("Adicionando ponto para estrada curva em:", currentPos);
-            this.currentCurvePoints.push(currentPos);
-            // Aqui você adicionaria uma representação visual do ponto
-            // E uma lógica para finalizar o desenho (ex: clique duplo, tecla Enter)
-            // Ao finalizar, você chamaria uma função como 'createCurvedRoad(this.currentCurvePoints)'
-        }
     },
-    
-    createPowerLineObject: function(start, end, firstPole) {
-        const path = new THREE.Vector3().subVectors(end, start);
-        const length = path.length();
-        const poleHeight = 12;
 
-        const powerLineGroup = new THREE.Group();
-        const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 });
-        const crossarmGeo = new THREE.BoxGeometry(4, 0.4, 0.4);
-        
-        powerLineGroup.add(firstPole);
+    finalizeCurvedRoad: function() {
+        if (this.currentCurvePoints.length < 2) {
+            this.cancelCurvedRoad();
+            return;
+        }
+        const curve = new THREE.CatmullRomCurve3(this.currentCurvePoints);
+        const roadWidth = this.gridSize * 0.8;
+        const tubularSegments = Math.floor(curve.getLength() * 2);
+        const geo = new THREE.TubeGeometry(curve, tubularSegments, roadWidth / 2, 8, false);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.scale.y = 0.05; 
+        mesh.position.y = 0.1;
+        mesh.userData = { type: 'road-curved', points: [...this.currentCurvePoints] };
+        this.checkForAndProcessIntersections(mesh);
+        this.cancelCurvedRoad();
+    },
 
-        const secondPole = firstPole.clone();
-        secondPole.position.copy(end);
-        secondPole.position.y = poleHeight / 2;
-        powerLineGroup.add(secondPole);
-
-        const crossarm1 = new THREE.Mesh(crossarmGeo, poleMat);
-        crossarm1.position.copy(start).y = poleHeight - 1.5;
-        crossarm1.rotation.y = Math.atan2(path.x, path.z) + Math.PI / 2;
-        powerLineGroup.add(crossarm1);
-
-        const crossarm2 = crossarm1.clone();
-        crossarm2.position.copy(end).y = poleHeight - 1.5;
-        powerLineGroup.add(crossarm2);
-
-        const wireGeo = new THREE.BoxGeometry(0.2, 0.2, length);
-        const wireMat = new THREE.MeshLambertMaterial({ color: 0x303030 });
-        const wire = new THREE.Mesh(wireGeo, wireMat);
-        wire.position.copy(start).add(path.clone().multiplyScalar(0.5));
-        wire.position.y = poleHeight - 1.7;
-        wire.lookAt(end);
-        powerLineGroup.add(wire);
-
-        const objectData = { isPowered: false, type: 'connector', powerRadius: this.gridSize * 2.5, consumption: 0.2 };
-        powerLineGroup.userData = objectData;
-        
-        powerLineGroup.position.set(0, 0, 0); 
-        
-        this.scene.add(powerLineGroup);
-        this.cityObjects.push(powerLineGroup);
-        this.powerConnectors.push(powerLineGroup);
-        this.updatePowerGrid();
+    cancelCurvedRoad: function() {
+        this.curveGuideMeshes.forEach(mesh => this.scene.remove(mesh));
+        this.curveGuideMeshes = [];
+        this.currentCurvePoints = [];
     },
     
     createRoadSegment: function(start, end) {
         const path = new THREE.Vector3().subVectors(end, start);
         const length = path.length();
         if(length === 0) return;
-
         const geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
         const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const mesh = new THREE.Mesh(geo, mat);
-        
         mesh.position.copy(start).add(path.clone().multiplyScalar(0.5));
         mesh.rotation.y = Math.atan2(path.x, path.z);
-        
-        // ATUALIZADO: Armazena os pontos de início/fim e o tipo para uso futuro
-        mesh.userData = { 
-            type: 'road', 
-            startPoint: start.clone(),
-            endPoint: end.clone(),
-            isPowered: false, 
-            powerRadius: this.gridSize * 0.6, 
-            consumption: 0.1 
-        };
-        
-        this.scene.add(mesh);
-        this.cityObjects.push(mesh);
-        this.powerConnectors.push(mesh); // Estradas também podem conduzir energia
+        mesh.userData = { type: 'road', startPoint: start.clone(), endPoint: end.clone() };
+        this.checkForAndProcessIntersections(mesh);
+    },
 
-        // NOVO: Atualiza o grid lógico com a nova estrada
-        this.updateLogicalGridForRoad(mesh);
+    checkForAndProcessIntersections: function(newRoadObject) {
+        let intersections = [];
+        const newRoadSegments = this.getRoadSegments(newRoadObject);
+        const roadsToCheck = this.cityObjects.filter(obj => obj.userData.type?.startsWith('road'));
 
+        for (const existingRoad of roadsToCheck) {
+            const existingRoadSegments = this.getRoadSegments(existingRoad);
+            for (const newSeg of newRoadSegments) {
+                for (const existingSeg of existingRoadSegments) {
+                    const intersectionPoint = this.lineSegmentIntersection(newSeg.p1, newSeg.p2, existingSeg.p1, existingSeg.p2);
+                    if (intersectionPoint) {
+                        intersections.push({ point: intersectionPoint, road1: newRoadObject, road2: existingRoad });
+                    }
+                }
+            }
+        }
+
+        if (intersections.length > 0) {
+            const roadsToReplace = new Set();
+            intersections.forEach(i => {
+                roadsToReplace.add(i.road1);
+                roadsToReplace.add(i.road2);
+            });
+            
+            roadsToReplace.forEach(road => this.removeObject(road, false));
+            intersections.forEach(i => this.createIntersectionNode(i.point));
+
+            roadsToReplace.forEach(road => {
+                let roadPoints = (road.userData.type === 'road') ? [road.userData.startPoint, road.userData.endPoint] : road.userData.points;
+                let intersectionPointsOnThisRoad = intersections.filter(i => i.road1 === road || i.road2 === road).map(i => i.point);
+                const allPoints = [...roadPoints, ...intersectionPointsOnThisRoad].sort((a, b) => roadPoints[0].distanceTo(a) - roadPoints[0].distanceTo(b));
+
+                for (let i = 0; i < allPoints.length - 1; i++) {
+                    const p1 = allPoints[i];
+                    const p2 = allPoints[i+1];
+                    if (p1.distanceTo(p2) > 1) { 
+                        this.addRoadObjectToScene(this.createRoadMesh(p1, p2));
+                    }
+                }
+            });
+        } else {
+            this.addRoadObjectToScene(newRoadObject);
+        }
+        this.recalculateAllRoadAdjacency();
         this.updatePowerGrid();
     },
 
-    // ATUALIZADO: A validação agora acontece aqui, antes de construir
-    placeObject: function() {
-        if (!this.buildCursor.visible || this.buildMode === 'select') return;
-        
-        const position = this.buildCursor.position.clone();
+    createRoadMesh: function(p1, p2) {
+        const path = new THREE.Vector3().subVectors(p2, p1);
+        const length = path.length();
+        const geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(p1).add(path.clone().multiplyScalar(0.5));
+        mesh.rotation.y = Math.atan2(path.x, path.z);
+        mesh.userData = { type: 'road', startPoint: p1.clone(), endPoint: p2.clone() };
+        return mesh;
+    },
 
-        // NOVO: Validação de Zoneamento
-        if (this.buildMode === 'residential' || this.buildMode === 'commercial') {
-            const logicalCoords = this.worldToGridCoords(position);
-            // Se a célula no grid não for '2' (zona construível), cancela a construção
-            if (!logicalCoords || this.logicalGrid[logicalCoords.x][logicalCoords.z] !== 2) {
-                console.log("Construção cancelada: deve ser ao lado de uma estrada.");
-                // Você pode adicionar um feedback sonoro ou visual aqui
-                return;
+    addRoadObjectToScene: function(roadObject) {
+        roadObject.userData.isPowered = false;
+        roadObject.userData.powerRadius = this.gridSize * 0.6;
+        roadObject.userData.consumption = 0.1 * (roadObject.userData.points ? roadObject.userData.points.length : 1);
+        this.scene.add(roadObject);
+        this.cityObjects.push(roadObject);
+        this.powerConnectors.push(roadObject);
+    },
+
+    createIntersectionNode: function(position) {
+        const geo = new THREE.CylinderGeometry(this.gridSize * 0.5, this.gridSize * 0.5, 0.3, 16);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(position).y = 0.15;
+        mesh.userData = { type: 'intersection', isPowered: false, powerRadius: this.gridSize * 0.6, consumption: 0.05 };
+        this.scene.add(mesh);
+        this.cityObjects.push(mesh);
+        this.powerConnectors.push(mesh);
+    },
+
+    getRoadSegments: function(roadObject) {
+        let segments = [];
+        if (roadObject.userData.type === 'road') {
+            segments.push({ p1: roadObject.userData.startPoint, p2: roadObject.userData.endPoint });
+        } else if (roadObject.userData.type === 'road-curved') {
+            const points = roadObject.userData.points;
+            for (let i = 0; i < points.length - 1; i++) {
+                segments.push({ p1: points[i], p2: points[i + 1] });
             }
         }
+        return segments;
+    },
+
+    lineSegmentIntersection: function(p1, p2, p3, p4) {
+        const den = (p1.x - p2.x) * (p3.z - p4.z) - (p1.z - p2.z) * (p3.x - p4.x);
+        if (den === 0) return null;
+        const t = ((p1.x - p3.x) * (p3.z - p4.z) - (p1.z - p3.z) * (p3.x - p4.x)) / den;
+        const u = -((p1.x - p2.x) * (p1.z - p3.z) - (p1.z - p2.z) * (p1.x - p3.x)) / den;
+        if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) { // Pequena margem para evitar tocar nas pontas
+            const intersectionPoint = new THREE.Vector3();
+            intersectionPoint.x = p1.x + t * (p2.x - p1.x);
+            intersectionPoint.z = p1.z + t * (p2.z - p1.z);
+            return intersectionPoint;
+        }
+        return null;
+    },
+
+    demolishObject: function() {
+        const intersects = this.raycaster.intersectObjects(this.cityObjects, true);
+        if (intersects.length > 0) {
+            let objectToDemolish = intersects[0].object;
+            while (objectToDemolish.parent && objectToDemolish.parent !== this.scene) {
+                objectToDemolish = objectToDemolish.parent;
+            }
+            if (objectToDemolish.userData.type === 'intersection') {
+                const intersectionPoint = objectToDemolish.position;
+                const objectsToRemove = [objectToDemolish];
+                this.cityObjects.filter(obj => obj.userData.type?.startsWith('road')).forEach(road => {
+                    const start = road.userData.startPoint;
+                    const end = road.userData.endPoint;
+                    if (start?.distanceTo(intersectionPoint) < 0.1 || end?.distanceTo(intersectionPoint) < 0.1) {
+                        objectsToRemove.push(road);
+                    }
+                });
+                objectsToRemove.forEach(obj => this.removeObject(obj, false));
+                this.recalculateAllRoadAdjacency();
+                this.updatePowerGrid();
+            } else {
+                this.removeObject(objectToDemolish, true);
+            }
+        }
+    },
+
+    removeObject: function(object, doRecalculate = true) {
+        const wasRoad = object.userData.type?.startsWith('road') || object.userData.type === 'intersection';
+        this.cityObjects = this.cityObjects.filter(o => o.uuid !== object.uuid);
+        this.powerProducers = this.powerProducers.filter(o => o.uuid !== object.uuid);
+        this.powerConsumers = this.powerConsumers.filter(o => o.uuid !== object.uuid);
+        this.powerConnectors = this.powerConnectors.filter(o => o.uuid !== object.uuid);
         
+        this.scene.remove(object);
+        object.traverse(child => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            }
+        });
+        
+        if (wasRoad && doRecalculate) {
+            this.recalculateAllRoadAdjacency();
+            this.updatePowerGrid();
+        }
+    },
+
+    placeObject: function() {
+        if (!this.buildCursor.visible || this.buildMode === 'select') return;
+        const position = this.buildCursor.position.clone();
+        if (this.buildMode === 'residential' || this.buildMode === 'commercial') {
+            const logicalCoords = this.worldToGridCoords(position);
+            if (!logicalCoords || this.logicalGrid[logicalCoords.x][logicalCoords.z] !== 2) { return; }
+        }
         let newObject, height = 0;
         let objectData = { isPowered: false, originalColor: 0xffffff };
-        
         switch (this.buildMode) {
             case 'residential':
-                height = this.gridSize;
-                objectData.originalColor = 0x34A853;
+                height = this.gridSize; objectData.originalColor = 0x34A853;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: objectData.originalColor }));
                 objectData.type = 'consumer'; objectData.consumption = 5; this.powerConsumers.push(newObject);
                 break;
             case 'commercial':
-                height = this.gridSize * 1.5;
-                objectData.originalColor = 0x4285F4;
+                height = this.gridSize * 1.5; objectData.originalColor = 0x4285F4;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: objectData.originalColor }));
                 objectData.type = 'consumer'; objectData.consumption = 10; this.powerConsumers.push(newObject);
                 break;
@@ -322,54 +422,25 @@ const Game = {
                 break;
             default: return;
         }
-        
-        newObject.position.copy(position);
-        newObject.position.y = height / 2;
+        newObject.position.copy(position).y = height / 2;
         newObject.userData = objectData;
-        
         this.scene.add(newObject);
         this.cityObjects.push(newObject);
         this.updatePowerGrid();
     },
 
-    // ATUALIZADO: A demolição de estradas agora recalcula as zonas construíveis
-    demolishObject: function() {
-        const intersects = this.raycaster.intersectObjects(this.cityObjects, true);
-        if (intersects.length > 0) {
-            let objectToDemolish = intersects[0].object;
-            // Garante que estamos demolindo o grupo inteiro (ex: linhas de energia)
-            while (objectToDemolish.parent && objectToDemolish.parent !== this.scene) {
-                 objectToDemolish = objectToDemolish.parent;
-            }
-            
-            const wasRoad = objectToDemolish.userData.type === 'road';
-
-            this.cityObjects = this.cityObjects.filter(o => o.uuid !== objectToDemolish.uuid);
-            this.powerProducers = this.powerProducers.filter(o => o.uuid !== objectToDemolish.uuid);
-            this.powerConsumers = this.powerConsumers.filter(o => o.uuid !== objectToDemolish.uuid);
-            this.powerConnectors = this.powerConnectors.filter(o => o.uuid !== objectToDemolish.uuid);
-            
-            this.scene.remove(objectToDemolish);
-            objectToDemolish.traverse(child => {
-                if (child.isMesh) {
-                    if (child.geometry) child.geometry.dispose();
-                    if (child.material) child.material.dispose();
-                }
-            });
-            
-            // Se uma estrada foi demolida, recalcula todo o grid de construção
-            if(wasRoad) {
-                this.recalculateAllRoadAdjacency();
-            }
-
-            this.updatePowerGrid();
-        }
+    recalculateAllRoadAdjacency: function() {
+        this.initializeLogicalGrid();
+        this.cityObjects.forEach(obj => {
+            if (obj.userData.type === 'road') this.updateLogicalGridForRoad(obj);
+            else if (obj.userData.type === 'road-curved') this.updateLogicalGridForCurvedRoad(obj);
+            else if (obj.userData.type === 'intersection') this.markGridCellsAroundPoint(obj.position);
+        });
     },
-    
-    // NOVO: Funções para gerenciar o Grid Lógico
+
     worldToGridCoords: function(worldPos) {
-        const gridX = Math.round(worldPos.x / this.gridSize) + (this.gridCells / 2);
-        const gridZ = Math.round(worldPos.z / this.gridSize) + (this.gridCells / 2);
+        const gridX = Math.floor(worldPos.x / this.gridSize) + (this.gridCells / 2);
+        const gridZ = Math.floor(worldPos.z / this.gridSize) + (this.gridCells / 2);
         if (gridX >= 0 && gridX < this.gridCells && gridZ >= 0 && gridZ < this.gridCells) {
             return { x: gridX, z: gridZ };
         }
@@ -380,83 +451,101 @@ const Game = {
         const start = roadMesh.userData.startPoint;
         const end = roadMesh.userData.endPoint;
         const distance = start.distanceTo(end);
-        const segments = distance / (this.gridSize / 2); // Verifica a cada meio grid
+        const segments = distance / (this.gridSize / 2);
         const path = new THREE.Vector3().subVectors(end, start);
-        
         for (let i = 0; i <= segments; i++) {
             const point = start.clone().add(path.clone().multiplyScalar(i / segments));
-            const coords = this.worldToGridCoords(point);
-            if (coords) {
-                // Marca a célula da estrada como '1'
-                this.logicalGrid[coords.x][coords.z] = 1;
-                
-                // Marca as células adjacentes como '2' (construível)
-                const neighbors = [{x:0,z:1}, {x:0,z:-1}, {x:1,z:0}, {x:-1,z:0}];
-                neighbors.forEach(n => {
-                    const nx = coords.x + n.x;
-                    const nz = coords.z + n.z;
-                    if(nx >= 0 && nx < this.gridCells && nz >= 0 && nz < this.gridCells && this.logicalGrid[nx][nz] === 0) {
-                        this.logicalGrid[nx][nz] = 2;
-                    }
-                });
-            }
+            this.markGridCellsAroundPoint(point);
+        }
+    },
+    
+    updateLogicalGridForCurvedRoad: function(roadMesh) {
+        const curve = new THREE.CatmullRomCurve3(roadMesh.userData.points);
+        const points = curve.getPoints(Math.floor(curve.getLength() * 0.5));
+        points.forEach(point => this.markGridCellsAroundPoint(point));
+    },
+
+    markGridCellsAroundPoint: function(point) {
+        const coords = this.worldToGridCoords(point);
+        if (coords) {
+            this.logicalGrid[coords.x][coords.z] = 1;
+            const neighbors = [{x:0,z:1}, {x:0,z:-1}, {x:1,z:0}, {x:-1,z:0}];
+            neighbors.forEach(n => {
+                const nx = coords.x + n.x;
+                const nz = coords.z + n.z;
+                if(nx >= 0 && nx < this.gridCells && nz >= 0 && nz < this.gridCells && this.logicalGrid[nx][nz] === 0) {
+                    this.logicalGrid[nx][nz] = 2;
+                }
+            });
         }
     },
 
-    recalculateAllRoadAdjacency: function() {
-        // 1. Reseta todo o grid relacionado a estradas
-        this.initializeLogicalGrid();
-        // 2. Itera sobre todos os objetos da cidade e re-aplica a lógica para cada estrada existente
-        this.cityObjects.forEach(obj => {
-            if (obj.userData.type === 'road') {
-                this.updateLogicalGridForRoad(obj);
-            }
-        });
+    createPowerLineObject: function(start, end, firstPole) {
+        const path = new THREE.Vector3().subVectors(end, start);
+        const length = path.length();
+        const poleHeight = 12;
+        const powerLineGroup = new THREE.Group();
+        const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 });
+        const crossarmGeo = new THREE.BoxGeometry(4, 0.4, 0.4);
+        powerLineGroup.add(firstPole);
+        const secondPole = firstPole.clone();
+        secondPole.position.copy(end).y = poleHeight / 2;
+        powerLineGroup.add(secondPole);
+        const crossarm1 = new THREE.Mesh(crossarmGeo, poleMat);
+        crossarm1.position.copy(start).y = poleHeight - 1.5;
+        crossarm1.rotation.y = Math.atan2(path.x, path.z) + Math.PI / 2;
+        powerLineGroup.add(crossarm1);
+        const crossarm2 = crossarm1.clone();
+        crossarm2.position.copy(end).y = poleHeight - 1.5;
+        powerLineGroup.add(crossarm2);
+        const wireGeo = new THREE.BoxGeometry(0.2, 0.2, length);
+        const wireMat = new THREE.MeshLambertMaterial({ color: 0x303030 });
+        const wire = new THREE.Mesh(wireGeo, wireMat);
+        wire.position.copy(start).add(path.clone().multiplyScalar(0.5));
+        wire.position.y = poleHeight - 1.7;
+        wire.lookAt(end);
+        powerLineGroup.add(wire);
+        powerLineGroup.userData = { isPowered: false, type: 'connector', powerRadius: this.gridSize * 2.5, consumption: 0.2 };
+        this.scene.add(powerLineGroup);
+        this.cityObjects.push(powerLineGroup);
+        this.powerConnectors.push(powerLineGroup);
+        this.updatePowerGrid();
     },
 
     updatePowerGrid: function() {
         const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
-        
         this.powerOverlay.clear();
         allPowerObjects.forEach(obj => { obj.userData.isPowered = false; });
         this.powerAvailable = 0;
         this.powerNeeded = 0;
-
         const poweredQueue = [];
         this.powerProducers.forEach(producer => {
             this.powerAvailable += producer.userData.production;
             producer.userData.isPowered = true;
             poweredQueue.push(producer);
         });
-
         let head = 0;
         while (head < poweredQueue.length) {
             const currentPowered = poweredQueue[head++];
             const radius = currentPowered.userData.powerRadius || 0;
             if (!radius) continue;
-
             const sourcePositions = [];
             if (currentPowered.isGroup && currentPowered.userData.type === 'connector') {
-                sourcePositions.push(currentPowered.children[0].position);
-                sourcePositions.push(currentPowered.children[1].position);
+                sourcePositions.push(currentPowered.children[0].position, currentPowered.children[1].position);
             } else {
                 sourcePositions.push(currentPowered.position);
             }
-
             sourcePositions.forEach(sourcePos => {
                 allPowerObjects.forEach(otherObj => {
                     if (!otherObj.userData.isPowered) {
                         let isConnected = false;
                         if (otherObj.isGroup && otherObj.userData.type === 'connector') {
-                            const pole1Pos = otherObj.children[0].position;
-                            const pole2Pos = otherObj.children[1].position;
-                            if (sourcePos.distanceTo(pole1Pos) < radius || sourcePos.distanceTo(pole2Pos) < radius) {
-                                isConnected = true;
-                            }
+                            const p1 = otherObj.children[0].position; const p2 = otherObj.children[1].position;
+                            if (sourcePos.distanceTo(p1) < radius || sourcePos.distanceTo(p2) < radius) isConnected = true;
+                        } else if(otherObj.userData.type?.startsWith('road') || otherObj.userData.type === 'intersection') {
+                            if (sourcePos.distanceTo(otherObj.position) < radius) isConnected = true;
                         } else {
-                            if (sourcePos.distanceTo(otherObj.position) < radius) {
-                                isConnected = true;
-                            }
+                            if (sourcePos.distanceTo(otherObj.position) < radius) isConnected = true;
                         }
                         if (isConnected) {
                             otherObj.userData.isPowered = true;
@@ -466,39 +555,33 @@ const Game = {
                 });
             });
         }
-        
         poweredQueue.forEach(poweredObj => {
             if (poweredObj.userData.powerRadius) {
                 const radius = poweredObj.userData.powerRadius;
                 const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
                 const overlayPositions = [];
                 if (poweredObj.isGroup && poweredObj.userData.type === 'connector') {
-                    overlayPositions.push(poweredObj.children[0].position);
-                    overlayPositions.push(poweredObj.children[1].position);
+                    overlayPositions.push(poweredObj.children[0].position, poweredObj.children[1].position);
                 } else {
                     overlayPositions.push(poweredObj.position);
                 }
                 overlayPositions.forEach(pos => {
                     const circleGeo = new THREE.CircleGeometry(radius, 32);
                     const circleMesh = new THREE.Mesh(circleGeo, circleMat);
-                    circleMesh.position.copy(pos);
-                    circleMesh.position.y = 0.1;
+                    circleMesh.position.copy(pos).y = 0.1;
                     circleMesh.rotation.x = -Math.PI / 2;
                     this.powerOverlay.add(circleMesh);
                 });
             }
         });
-        
         this.powerConsumers.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
         this.powerConnectors.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
         const hasEnoughPower = this.powerAvailable >= this.powerNeeded;
-
         this.powerConsumers.forEach(c => {
             const shouldBePowered = c.userData.isPowered && hasEnoughPower;
             c.material.color.set(shouldBePowered ? c.userData.originalColor : 0x808080);
             this.toggleNoPowerIcon(c, !shouldBePowered);
         });
-
         this.updatePowerUI();
     },
 
@@ -532,7 +615,8 @@ const Game = {
         const { x, z } = this.moveDirection;
         if (x !== 0 || z !== 0) {
             if (this.cameraMode === 'move') {
-                this.cameraPivot.translateX(x * this.moveSpeed); this.cameraPivot.translateZ(z * this.moveSpeed);
+                this.cameraPivot.translateX(x * this.moveSpeed);
+                this.cameraPivot.translateZ(z * this.moveSpeed);
             } else {
                 this.cameraPivot.rotateY(-x * this.rotateSpeed);
                 const newRotX = this.camera.rotation.x - z * this.rotateSpeed;
