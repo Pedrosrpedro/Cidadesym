@@ -117,7 +117,6 @@ const Game = {
             })
         );
         this.waterMesh.rotation.x = -Math.PI / 2;
-        // CORREÇÃO: Nível da água ajustado para combinar com a nova altura da ilha.
         this.waterMesh.position.y = 4.0;
         this.scene.add(this.waterMesh);
         
@@ -151,8 +150,6 @@ const Game = {
         
         const center = new THREE.Vector2(0, 0);
         const maxDist = this.gridWorldSize / 2;
-
-        // CORREÇÃO: Adicionada uma altura base para elevar toda a ilha.
         const baseHeight = 8.0;
         
         for (let i = 0; i < vertices.count; i++) {
@@ -161,7 +158,8 @@ const Game = {
             
             let noise = 0;
             let frequency = 2.5 / this.gridWorldSize;
-            let amplitude = 20;
+            // CORREÇÃO: Amplitude aumentada para maior variação de relevo.
+            let amplitude = 35;
             for (let j = 0; j < 4; j++) {
                 noise += Noise.perlin2(x * frequency, z * frequency) * amplitude;
                 frequency *= 2;
@@ -169,18 +167,17 @@ const Game = {
             }
 
             const dist = center.distanceTo(new THREE.Vector2(x, z));
-            const falloff = Math.pow(1.0 - (dist / maxDist), 2.0);
-            
-            // CORREÇÃO: A altura agora inclui a altura base.
+            // CORREÇÃO: Expoente do falloff ajustado para uma transição mais suave.
+            const falloff = Math.pow(1.0 - (dist / maxDist), 1.8);
             let height = baseHeight + (noise * falloff);
             height = Math.max(height, 0);
             
             vertices.setZ(i, height);
 
-            // CORREÇÃO: Limites de cor ajustados para a nova altura do terreno.
-            if (height < baseHeight + 1.5) { // Era 2.5
+            // CORREÇÃO: Limites de cor ajustados para a nova faixa de altura.
+            if (height < baseHeight + 3.0) { 
                 colors.push(sandColor.r, sandColor.g, sandColor.b);
-            } else if (height > baseHeight + 20) { // Era 18
+            } else if (height > baseHeight + 30) {
                  colors.push(rockColor.r, rockColor.g, rockColor.b);
             } else {
                 colors.push(grassColor.r, grassColor.g, grassColor.b);
@@ -253,7 +250,7 @@ const Game = {
             
             this.buildCursor.position.set(gridX * this.gridSize, terrainHeight + 0.25, gridZ * this.gridSize);
             
-            const needsTerraforming = this.buildMode.startsWith('power') || this.buildMode === 'residential' || this.buildMode === 'commercial';
+            const needsTerraforming = this.buildMode.startsWith('power') || this.buildMode === 'residential' || this.buildMode === 'commercial' || this.buildMode.startsWith('terraform');
             this.terraformCursor.visible = needsTerraforming;
             if (needsTerraforming) {
                 this.terraformCursor.position.set(this.buildCursor.position.x, terrainHeight + 0.05, this.buildCursor.position.z);
@@ -279,9 +276,69 @@ const Game = {
             this.demolishObject();
         } else if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) {
             this.handleLinePlacement();
+        } else if (this.buildMode.startsWith('terraform')) { // NOVO: Captura o clique para terraformar
+            this.modifyTerrainOnClick();
         } else {
             this.placeObject();
         }
+    },
+
+    // NOVO: Função para modificar o terreno com o clique do mouse.
+    modifyTerrainOnClick: function() {
+        if (!this.buildCursor.visible) return;
+
+        const center = this.buildCursor.position;
+        const brushSize = this.gridSize * 1.5;
+        const brushStrength = 0.5; // Quão forte é o efeito a cada clique
+
+        const terrainGeo = this.terrainMesh.geometry;
+        const vertices = terrainGeo.attributes.position;
+
+        for (let i = 0; i < vertices.count; i++) {
+            const vPos = new THREE.Vector3(vertices.getX(i), 0, vertices.getY(i));
+            const dist = vPos.distanceTo(new THREE.Vector3(center.x, 0, center.z));
+
+            if (dist < brushSize) {
+                // Efeito de suavização (falloff) - mais forte no centro do pincel
+                const falloff = Math.cos((dist / brushSize) * (Math.PI / 2));
+                const amount = brushStrength * falloff;
+                
+                let currentHeight = vertices.getZ(i);
+                if (this.buildMode === 'terraform-raise') {
+                    vertices.setZ(i, currentHeight + amount);
+                } else if (this.buildMode === 'terraform-lower') {
+                    vertices.setZ(i, currentHeight - amount);
+                }
+            }
+        }
+        vertices.needsUpdate = true;
+        terrainGeo.computeVertexNormals();
+        // Atualiza as cores do terreno após a modificação
+        this.updateTerrainColors();
+    },
+
+    // NOVO: Função para recalcular as cores do terreno (útil após terraformagem).
+    updateTerrainColors: function() {
+        const terrainGeo = this.terrainMesh.geometry;
+        const vertices = terrainGeo.attributes.position;
+        const colors = [];
+        const sandColor = new THREE.Color(0xC2B280);
+        const grassColor = new THREE.Color(0x55902A);
+        const rockColor = new THREE.Color(0x808080);
+        const baseHeight = 8.0;
+
+        for(let i = 0; i < vertices.count; i++) {
+            const height = vertices.getZ(i);
+            if (height < baseHeight + 3.0) {
+                colors.push(sandColor.r, sandColor.g, sandColor.b);
+            } else if (height > baseHeight + 30) {
+                 colors.push(rockColor.r, rockColor.g, rockColor.b);
+            } else {
+                colors.push(grassColor.r, grassColor.g, grassColor.b);
+            }
+        }
+        terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        terrainGeo.attributes.color.needsUpdate = true;
     },
 
     handleLinePlacement: function() {
@@ -333,35 +390,40 @@ const Game = {
         this.curveGuideMeshes = [];
         this.currentCurvePoints = [];
     },
-
+    
+    // CORREÇÃO: Lógica de criação de estrada refeita com ExtrudeGeometry.
     createRoadObject: function(points) {
         const pointsWithTerrainHeight = points.map(p => {
             const point = p.clone();
-            point.y = this.getTerrainHeight(p.x, p.z);
+            point.y = this.getTerrainHeight(p.x, p.z) + 0.1; // Um pequeno offset para evitar z-fighting
             return point;
         });
 
         const curve = new THREE.CatmullRomCurve3(pointsWithTerrainHeight);
-        const curvePoints = curve.getPoints(Math.floor(curve.getLength() * 1.5));
-        
         const roadWidth = this.gridSize * 0.8;
+        const tubularSegments = Math.max(64, Math.floor(curve.getLength() * 2));
 
-        // CORREÇÃO: Usando 4 segmentos radiais para uma aparência de estrada mais plana.
-        // Aumentando os segmentos tubulares para uma curva mais suave.
-        const tubularSegments = Math.max(64, curvePoints.length * 2);
-        const radialSegments = 4;
-        const geo = new THREE.TubeGeometry(curve, tubularSegments, roadWidth / 2, radialSegments, false);
+        // Cria uma forma 2D (uma linha) que será "esticada" ao longo da curva.
+        const roadShape = new THREE.Shape([
+            new THREE.Vector2(-roadWidth / 2, 0),
+            new THREE.Vector2(roadWidth / 2, 0)
+        ]);
+
+        const extrudeSettings = {
+            steps: tubularSegments,
+            bevelEnabled: false,
+            extrudePath: curve
+        };
+
+        const geo = new THREE.ExtrudeGeometry(roadShape, extrudeSettings);
         const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const mesh = new THREE.Mesh(geo, mat);
         
         mesh.userData = { 
             type: 'road-unified', 
-            // Os pontos da estrada agora são os pontos suavizados da curva.
-            points: curvePoints
+            points: curve.getPoints(tubularSegments) // Salva os pontos da curva para terraplanagem
         };
         
-        // CORREÇÃO: A terraplanagem agora é chamada com o objeto da estrada,
-        // usando a nova lógica inteligente.
         this.terraformArea(mesh);
         this.checkForAndProcessIntersections(mesh);
     },
@@ -388,7 +450,6 @@ const Game = {
         }
         
         const objectSize = (this.buildMode === 'power-coal') ? this.gridSize * 2 : this.gridSize;
-        // CORREÇÃO: A terraplanagem para edifícios agora usa a nova função.
         const newHeight = this.terraformArea(null, [position], objectSize);
         
         let newObject, height = 0;
@@ -423,69 +484,42 @@ const Game = {
         this.updatePowerGrid();
     },
 
-    // CORREÇÃO: Lógica de terraplanagem completamente refeita.
+    // CORREÇÃO: Lógica de terraplanagem ajustada para evitar crashes.
     terraformArea: function(pathObject, buildingPoints = null, areaSize = this.gridSize) {
         const terrainGeo = this.terrainMesh.geometry;
         const vertices = terrainGeo.attributes.position;
-        const maxDeformationThreshold = 2.0; // Altura máxima que a estrada se deforma antes de terraplanar.
+        const maxDeformationThreshold = 2.0;
+        let needsColorUpdate = false;
 
         if (pathObject && pathObject.userData.type?.startsWith('road')) {
             const pathPoints = pathObject.userData.points;
-            if (!pathPoints) return;
-
-            // Para cada vértice do terreno, encontre o ponto mais próximo na estrada.
-            for (let i = 0; i < vertices.count; i++) {
-                const vPos = new THREE.Vector3(vertices.getX(i), 0, vertices.getY(i));
-                let minDist = Infinity;
-                let closestPointOnRoad = null;
-
-                for (let j = 0; j < pathPoints.length - 1; j++) {
-                    const segmentStart = pathPoints[j];
-                    const segmentEnd = pathPoints[j + 1];
-                    const closestPointOnSegment = new THREE.Line3(segmentStart, segmentEnd).closestPointToPoint(vPos, true, new THREE.Vector3());
-                    const dist = vPos.distanceTo(closestPointOnSegment);
-                    
-                    if (dist < minDist) {
-                        minDist = dist;
-                        closestPointOnRoad = closestPointOnSegment;
-                    }
-                }
-
-                // Se o vértice estiver dentro da largura da estrada, ajuste sua altura.
-                if (closestPointOnRoad && minDist < areaSize) {
-                    const currentTerrainHeight = vertices.getZ(i);
-                    const roadHeight = closestPointOnRoad.y;
-                    const heightDifference = Math.abs(currentTerrainHeight - roadHeight);
-                    
-                    let newHeight = currentTerrainHeight;
-                    // Se a diferença for grande, terraplana (interpolação).
-                    // Se for pequena, a estrada segue o terreno (nenhuma mudança).
-                    if (heightDifference > maxDeformationThreshold) {
-                         // Suaviza a transição nas bordas da área de terraplanagem
-                        const falloff = THREE.MathUtils.smoothstep(minDist, areaSize, 0);
-                        newHeight = THREE.MathUtils.lerp(currentTerrainHeight, roadHeight, falloff);
-                    }
-                    
-                    vertices.setZ(i, newHeight);
-                }
+            if (!pathPoints || pathPoints.length < 2) return;
+            
+            const modifiedVertices = new Set();
+            for (const pointOnCurve of pathPoints) {
+                this.findAndModifyVertices(pointOnCurve, areaSize, pointOnCurve.y, vertices, modifiedVertices, maxDeformationThreshold);
             }
+            needsColorUpdate = true;
 
         } else if (buildingPoints) {
-            // Lógica de terraplanagem para edifícios (aplainamento simples).
-            let totalHeight = 0;
+            // Lógica para aplainar área para edifícios.
             const centerPoint = buildingPoints[0];
+            let totalHeight = 0;
+            let count = 0;
             const halfSize = areaSize / 2;
 
             for (let i = 0; i < vertices.count; i++) {
                 const vX = vertices.getX(i);
                 const vZ = vertices.getY(i);
-                 if (vX >= centerPoint.x - halfSize && vX <= centerPoint.x + halfSize &&
-                     vZ >= centerPoint.z - halfSize && vZ <= centerPoint.z + halfSize) {
+                if (vX >= centerPoint.x - halfSize && vX <= centerPoint.x + halfSize &&
+                    vZ >= centerPoint.z - halfSize && vZ <= centerPoint.z + halfSize) {
                     totalHeight += vertices.getZ(i);
+                    count++;
                 }
             }
-            const averageHeight = totalHeight / buildingPoints.length; // Isso é uma aproximação, mas funciona.
+            const averageHeight = count > 0 ? totalHeight / count : this.getTerrainHeight(centerPoint.x, centerPoint.z);
             this.findAndModifyVertices(centerPoint, areaSize, averageHeight, vertices, new Set());
+            needsColorUpdate = true;
             vertices.needsUpdate = true;
             terrainGeo.computeVertexNormals();
             return averageHeight;
@@ -493,26 +527,50 @@ const Game = {
 
         vertices.needsUpdate = true;
         terrainGeo.computeVertexNormals();
+        if (needsColorUpdate) {
+            this.updateTerrainColors();
+        }
     },
 
-    findAndModifyVertices: function(center, size, newHeight, vertices, modifiedSet) {
+    findAndModifyVertices: function(center, size, newHeight, vertices, modifiedSet, threshold = -1) {
         const halfSize = size / 2;
         for (let i = 0; i < vertices.count; i++) {
+            if (modifiedSet.has(i)) continue;
+
             const vX = vertices.getX(i);
             const vZ = vertices.getY(i);
-            if (vX >= center.x - halfSize && vX <= center.x + halfSize &&
-                vZ >= center.z - halfSize && vZ <= center.z + halfSize) {
-                vertices.setZ(i, newHeight);
+            const dist = Math.sqrt(Math.pow(vX - center.x, 2) + Math.pow(vZ - center.z, 2));
+
+            if (dist < halfSize) {
+                const currentHeight = vertices.getZ(i);
+                let finalHeight = newHeight;
+                
+                // Se for estrada (threshold >= 0), aplica a lógica de deformar/terraplanar.
+                if (threshold >= 0) {
+                    const heightDifference = Math.abs(currentHeight - newHeight);
+                    if (heightDifference < threshold) {
+                        continue; // Deixa o terreno como está se a deformação for pequena.
+                    }
+                    // CORREÇÃO: Uso correto de smoothstep.
+                    const falloff = 1.0 - THREE.MathUtils.smoothstep(dist, 0, halfSize);
+                    finalHeight = THREE.MathUtils.lerp(currentHeight, newHeight, falloff);
+                }
+                
+                vertices.setZ(i, finalHeight);
                 modifiedSet.add(i);
             }
         }
     },
 
     getTerrainHeight: function(x, z) {
-        this.raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0)); // Aumentado o Y de origem do raycast
+        this.raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
         const intersects = this.raycaster.intersectObject(this.terrainMesh);
         return intersects.length > 0 ? intersects[0].point.y : 0;
     },
+    
+    // ... (o resto do seu código a partir daqui pode continuar o mesmo)
+    // As funções demolishObject, removeObject, checkForAndProcessIntersections, etc.,
+    // devem funcionar bem com as novas estradas e terreno.
     
     demolishObject: function() {
         const intersects = this.raycaster.intersectObjects(this.cityObjects, true);
@@ -587,7 +645,6 @@ const Game = {
             roadsToReplace.forEach(road => {
                 let roadPoints = road.userData.points;
                 let intersectionPointsOnThisRoad = intersections.filter(i => i.road1 === road || i.road2 === road).map(i => i.point);
-                // CORREÇÃO: Usar a projeção no primeiro segmento para ordenar corretamente os pontos
                 const firstSegment = new THREE.Line3(roadPoints[0], roadPoints[roadPoints.length-1]);
                 const allPoints = [...roadPoints, ...intersectionPointsOnThisRoad].sort((a, b) => 
                      firstSegment.closestPointToPoint(a, false, new THREE.Vector3()).distanceTo(roadPoints[0]) - 
@@ -610,7 +667,7 @@ const Game = {
     addRoadObjectToScene: function(roadObject) {
         roadObject.userData.isPowered = false;
         roadObject.userData.powerRadius = this.gridSize * 0.6;
-        roadObject.userData.consumption = 0.1 * roadObject.userData.points.length;
+        roadObject.userData.consumption = 0.1 * (roadObject.userData.points?.length || 1);
         this.scene.add(roadObject);
         this.cityObjects.push(roadObject);
         this.powerConnectors.push(roadObject);
@@ -633,7 +690,7 @@ const Game = {
         const t = ((p1.x - p3.x) * (p3.z - p4.z) - (p1.z - p3.z) * (p3.x - p4.x)) / den;
         const u = -((p1.x - p2.x) * (p1.z - p3.z) - (p1.z - p2.z) * (p1.x - p3.x)) / den;
         if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) {
-            const avgY = (p1.y + p2.y + p3.y + p4.y) / 4; // Use average height for the intersection point
+            const avgY = (p1.y + p2.y + p3.y + p4.y) / 4;
             const intersectionPoint = new THREE.Vector3(p1.x + t * (p2.x - p1.x), avgY, p1.z + t * (p2.z - p1.z));
             return intersectionPoint;
         }
@@ -790,8 +847,9 @@ const Game = {
     },
 
     updatePowerUI: function() {
-        // Supondo que você tenha um objeto UI para atualizar as informações.
-        // UI.updatePowerInfo(this.powerAvailable, this.powerNeeded);
+        if(window.UI) {
+            UI.updatePowerInfo(this.powerAvailable, this.powerNeeded);
+        }
     },
     
     toggleNoPowerIcon: function(building, show) {
@@ -804,7 +862,7 @@ const Game = {
             icon = new THREE.Sprite(material);
             icon.name = "noPowerIcon";
             icon.scale.set(8, 8, 8);
-            icon.position.y = building.geometry.parameters.height + 5;
+            icon.position.y = (building.geometry.parameters.height || this.gridSize) + 5;
             building.add(icon);
         } else if (!show && icon) {
             building.remove(icon);
