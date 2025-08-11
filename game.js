@@ -115,37 +115,44 @@ const Game = {
         }
     },
 
-    createLineSegment: function(start, end) {
-        const path = new THREE.Vector3().subVectors(end, start);
-        const length = path.length();
-        if(length === 0) return;
+    // Substitua esta função inteira no seu código
+createLineSegment: function(start, end) {
+    const path = new THREE.Vector3().subVectors(end, start);
+    const length = path.length();
+    if(length === 0) return;
 
-        let geo, mat;
-        const objectData = { isPowered: false, type: 'connector' };
+    let geo, mat; // Declaradas, mas ainda sem valor
+    const objectData = { isPowered: false, type: 'connector' };
 
-        if (this.buildMode.startsWith('road')) {
-            geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
-            mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-            objectData.powerRadius = this.gridSize * 0.6; // Ruas também conduzem um pouco
-            objectData.consumption = 0.1;
-        } else { // power-line
-            geo = new THREE.CylinderGeometry(0.5, 0.5, length, 6);
-            mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-            objectData.powerRadius = this.gridSize * 1.5; // Postes conduzem mais longe
-            objectData.consumption = 0.2;
-        }
-        
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.copy(start).add(path.multiplyScalar(0.5));
-        mesh.lookAt(end);
-        mesh.userData = objectData;
-        
-        this.scene.add(mesh);
-        this.cityObjects.push(mesh);
-        this.powerConnectors.push(mesh);
-        
-        this.updatePowerGrid();
-    },
+    // Verificação explícita para cada tipo de linha
+    if (this.buildMode.startsWith('road')) {
+        geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
+        mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        objectData.powerRadius = this.gridSize * 0.6;
+        objectData.consumption = 0.1;
+    } else if (this.buildMode.startsWith('power-line')) { // Usamos 'else if' para ser explícito
+        geo = new THREE.CylinderGeometry(0.5, 0.5, length, 6);
+        mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        objectData.powerRadius = this.gridSize * 1.5;
+        objectData.consumption = 0.2;
+    } else {
+        // Se um modo inválido chegar aqui, paramos a execução para evitar o erro.
+        console.error("createLineSegment foi chamada com um modo de construção inválido:", this.buildMode);
+        return; 
+    }
+    
+    // Agora, 'geo' e 'mat' com certeza terão valores quando esta linha for executada.
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(start).add(path.multiplyScalar(0.5));
+    mesh.rotation.y = Math.atan2(path.x, path.z); // Correção para alinhamento correto
+    mesh.userData = objectData;
+    
+    this.scene.add(mesh);
+    this.cityObjects.push(mesh);
+    this.powerConnectors.push(mesh);
+    
+    this.updatePowerGrid();
+},
     
     placeObject: function() {
         if (!this.buildCursor.visible || this.buildMode === 'select') return;
