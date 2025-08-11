@@ -301,10 +301,9 @@ const Game = {
 // Encontre a função updatePowerGrid no seu game.js e substitua-a por esta:
 
 updatePowerGrid: function() {
-    const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
-    
     // 1. Resetar tudo
-    this.powerOverlay.clear();
+    this.powerOverlay.clear(); // Movido para ser limpo antes de redesenhar
+    const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
     allPowerObjects.forEach(obj => { obj.userData.isPowered = false; });
     this.powerAvailable = 0;
     this.powerNeeded = 0;
@@ -317,62 +316,83 @@ updatePowerGrid: function() {
         poweredQueue.push(producer);
     });
 
-    // 3. Propagar energia pela rede (Algoritmo de Flood Fill APRIMORADO)
+    // 3. Propagar energia pela rede (Algoritmo de Flood Fill CORRIGIDO)
     let head = 0;
-    while(head < poweredQueue.length) {
+    while (head < poweredQueue.length) {
         const currentPowered = poweredQueue[head++];
         const radius = currentPowered.userData.powerRadius || 0;
-        const currentPos = currentPowered.position;
+        if (!radius) continue; // Pula objetos que não têm raio de energia (como casas)
 
-        allPowerObjects.forEach(otherObj => {
-            if (!otherObj.userData.isPowered) { // Apenas verifica objetos ainda sem energia
-                let isConnected = false;
+        // Define os pontos de origem da energia para o objeto atual
+        const sourcePositions = [];
+        if (currentPowered.isGroup && currentPowered.userData.type === 'connector') {
+            // Linhas de energia propagam a partir de AMBOS os postes
+            sourcePositions.push(currentPowered.children[0].position);
+            sourcePositions.push(currentPowered.children[1].position);
+        } else {
+            // Outros objetos (usinas, etc.) propagam a partir de seu centro
+            sourcePositions.push(currentPowered.position);
+        }
 
-                // LÓGICA APRIMORADA: Verifica a conexão de maneira diferente para cada tipo de objeto
-                if (otherObj.isGroup && otherObj.userData.type === 'connector') {
-                    // Se for uma LINHA DE ENERGIA (um grupo), verifica a distância até CADA POSTE.
-                    // Isso garante que a conexão pelas pontas funcione.
-                    const pole1Pos = otherObj.children[0].position;
-                    const pole2Pos = otherObj.children[1].position;
-                    if (currentPos.distanceTo(pole1Pos) < radius || currentPos.distanceTo(pole2Pos) < radius) {
-                        isConnected = true;
+        // Para cada ponto de origem, encontre objetos próximos para energizar
+        sourcePositions.forEach(sourcePos => {
+            allPowerObjects.forEach(otherObj => {
+                if (!otherObj.userData.isPowered) { // Apenas verifica objetos ainda sem energia
+                    let isConnected = false;
+
+                    // Verifica a conexão de maneira diferente dependendo do tipo de objeto
+                    if (otherObj.isGroup && otherObj.userData.type === 'connector') {
+                        // Conectando A UMA linha de energia: verifica a distância para cada poste dela
+                        const pole1Pos = otherObj.children[0].position;
+                        const pole2Pos = otherObj.children[1].position;
+                        if (sourcePos.distanceTo(pole1Pos) < radius || sourcePos.distanceTo(pole2Pos) < radius) {
+                            isConnected = true;
+                        }
+                    } else {
+                        // Conectando A um prédio, estrada, etc.: usa a posição central
+                        if (sourcePos.distanceTo(otherObj.position) < radius) {
+                            isConnected = true;
+                        }
                     }
-                } else {
-                    // Para todos os outros objetos (prédios, estradas, usinas), usa a posição central.
-                    if (currentPos.distanceTo(otherObj.position) < radius) {
-                        isConnected = true;
+
+                    if (isConnected) {
+                        otherObj.userData.isPowered = true;
+                        poweredQueue.push(otherObj); // Adiciona na fila para propagar a partir dele
                     }
                 }
-
-                if (isConnected) {
-                    otherObj.userData.isPowered = true;
-                    poweredQueue.push(otherObj); // Adiciona na fila para propagar a partir dele
-                }
-            }
+            });
         });
     }
-    
+
     // 4. Desenhar o overlay de energia para todos os objetos que ficaram energizados
     poweredQueue.forEach(poweredObj => {
         if (poweredObj.userData.powerRadius) {
             const radius = poweredObj.userData.powerRadius;
-            const circleGeo = new THREE.CircleGeometry(radius, 32);
             const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
-            const circleMesh = new THREE.Mesh(circleGeo, circleMat);
-            
-            // A posição do overlay para linhas de energia fica no meio, para estética
-            let objPosition = poweredObj.position;
-            if (poweredObj.isGroup && poweredObj.userData.type === 'connector') {
-                objPosition = poweredObj.children[0].position.clone().add(poweredObj.children[1].position).multiplyScalar(0.5);
-            }
 
-            circleMesh.position.copy(objPosition);
-            circleMesh.position.y = 0.1;
-            circleMesh.rotation.x = -Math.PI / 2;
-            this.powerOverlay.add(circleMesh);
+            // Define onde desenhar os círculos de energia
+            const overlayPositions = [];
+            if (poweredObj.isGroup && poweredObj.userData.type === 'connector') {
+                // Para linhas de energia, desenha um overlay em CADA poste
+                overlayPositions.push(poweredObj.children[0].position);
+                overlayPositions.push(poweredObj.children[1].position);
+            } else {
+                // Para outros objetos, desenha no centro
+                overlayPositions.push(poweredObj.position);
+            }
+            
+            // Cria e adiciona os círculos visuais
+            overlayPositions.forEach(pos => {
+                const circleGeo = new THREE.CircleGeometry(radius, 32);
+                const circleMesh = new THREE.Mesh(circleGeo, circleMat);
+                circleMesh.position.copy(pos);
+                circleMesh.position.y = 0.1;
+                circleMesh.rotation.x = -Math.PI / 2;
+                this.powerOverlay.add(circleMesh);
+            });
         }
     });
-    
+
     // 5. Calcular o consumo total e verificar se há energia suficiente
     this.powerConsumers.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
     this.powerConnectors.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
