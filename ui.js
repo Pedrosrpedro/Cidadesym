@@ -77,6 +77,15 @@ const UI = {
             }
         }
     },
+
+
+    updatePopulation: function(population) {
+        const populationElement = document.getElementById('population-info');
+        if (populationElement) {
+            populationElement.textContent = `HABITANTES: ${population}`;
+        }
+    },
+
     
     // NOVO: Atualiza a barra de informações de energia
     updatePowerInfo: function(available, needed) {
