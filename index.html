@@ -27,6 +27,7 @@
              <button id="exit-game-btn">Voltar ao Menu</button>
              <button id="camera-mode-btn">[Mover]</button>
              <button id="power-overlay-btn">Rede Elétrica</button>
+            <button id="water-overlay-btn">Rede de Água</button>
              <div id="info-bar">
                 <span id="power-info">ENERGIA: 0 / 0 MW</span>
                  <span id="population-info">HABITANTES: 0</span>
@@ -57,6 +58,17 @@
             <button class="ui-button" data-build-mode="terraform-lower">Abaixar Terreno</button>
         </div>
 
+<!-- Cole este novo painel junto com os outros painéis de submenu -->
+<div id="panel-water" class="submenu-panel hidden">
+    <button class="ui-button" data-build-mode="water-pump">Bomba d'Água</button>
+    <button class="ui-button" data-build-mode="sewage-plant">Trat. Esgoto</button>
+    <button class="ui-button" data-build-mode="pipe">Encanamento</button>
+</div>
+
+<!-- Na barra principal, adicione o botão que abre o painel de água -->
+<!-- <div id="main-toolbar"> -->
+<button class.ui-button main-tool-btn" data-panel="panel-water">Água</button>
+        
         <!-- BARRA PRINCIPAL -->
         <div id="main-toolbar">
             <button id="btn-select" class="ui-button">Selecionar</button>
