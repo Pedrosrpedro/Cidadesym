@@ -1,56 +1,61 @@
 // ui.js
-
 const UI = {
     activePanel: null,
     
     init: function() {
-        // Lógica para os botões da barra principal abrirem seus painéis
+        // Botões que abrem painéis
         document.querySelectorAll('.main-tool-btn').forEach(button => {
             button.addEventListener('click', () => {
-                const panelId = button.dataset.panel;
-                this.togglePanel(panelId);
+                this.setActiveButton(button);
+                this.togglePanel(button.dataset.panel);
             });
         });
 
-        // Lógica para os botões de construção nos sub-painéis
+        // Botões dentro dos painéis
         document.querySelectorAll('.submenu-panel .ui-button').forEach(button => {
             button.addEventListener('click', () => {
-                const buildMode = button.dataset.buildMode;
-                Game.setBuildMode(buildMode);
-                // Fecha todos os painéis após selecionar uma ferramenta
+                this.setActiveButton(button);
+                Game.setBuildMode(button.dataset.buildMode);
                 this.closeAllPanels();
             });
         });
         
-        // Botão de demolir é um caso especial
+        // Botões de ação direta
+        const selectBtn = document.getElementById('btn-select');
+        if(selectBtn) selectBtn.addEventListener('click', () => {
+            this.setActiveButton(selectBtn);
+            this.closeAllPanels();
+            Game.setBuildMode('select');
+        });
+
         const demolishBtn = document.getElementById('btn-demolish');
-        if(demolishBtn) {
-            demolishBtn.addEventListener('click', () => {
-                this.closeAllPanels();
-                Game.setBuildMode('demolish');
-            });
-        }
+        if(demolishBtn) demolishBtn.addEventListener('click', () => {
+            this.setActiveButton(demolishBtn);
+            this.closeAllPanels();
+            Game.setBuildMode('demolish');
+        });
         
-        // Botão para sair do jogo e voltar ao menu
+        // Botões do HUD
         const exitGameBtn = document.getElementById('exit-game-btn');
         if (exitGameBtn) exitGameBtn.addEventListener('click', () => window.location.reload());
+        
+        const powerOverlayBtn = document.getElementById('power-overlay-btn');
+        if (powerOverlayBtn) powerOverlayBtn.addEventListener('click', () => {
+            powerOverlayBtn.classList.toggle('active');
+            Game.togglePowerOverlay();
+        });
+
+        this.setActiveButton(selectBtn); // Inicia com o botão "Selecionar" ativo
     },
     
     togglePanel: function(panelId) {
         const newPanel = document.getElementById(panelId);
         if (!newPanel) return;
-
-        // Se o painel clicado já está ativo, fecha ele
         if (this.activePanel === newPanel) {
-            this.activePanel.classList.add('hidden');
-            this.activePanel = null;
+            this.closeAllPanels();
             return;
         }
-
-        // Fecha qualquer outro painel que esteja aberto
         this.closeAllPanels();
-
-        // Abre o novo painel
         newPanel.classList.remove('hidden');
         this.activePanel = newPanel;
     },
@@ -58,5 +63,10 @@ const UI = {
     closeAllPanels: function() {
         document.querySelectorAll('.submenu-panel').forEach(p => p.classList.add('hidden'));
         this.activePanel = null;
+    },
+    
+    setActiveButton: function(clickedButton) {
+        document.querySelectorAll('.ui-button.active').forEach(btn => btn.classList.remove('active'));
+        if (clickedButton) clickedButton.classList.add('active');
     }
 };
