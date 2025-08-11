@@ -3,6 +3,7 @@ const UI = {
     activePanel: null,
     
     init: function() {
+        // Botões que abrem painéis
         document.querySelectorAll('.main-tool-btn').forEach(button => {
             button.addEventListener('click', () => {
                 this.setActiveButton(button);
@@ -10,28 +11,31 @@ const UI = {
             });
         });
 
+        // Botões dentro dos painéis
         document.querySelectorAll('.submenu-panel .ui-button').forEach(button => {
             button.addEventListener('click', () => {
-                this.setActiveButton(button);
+                // Ao selecionar uma ferramenta, o botão principal da categoria continua ativo
+                this.setActiveButton(button, false); 
                 Game.setBuildMode(button.dataset.buildMode);
-                this.closeAllPanels();
             });
         });
         
+        // Botões de ação direta
         const selectBtn = document.getElementById('btn-select');
         if(selectBtn) selectBtn.addEventListener('click', () => {
-            this.setActiveButton(selectBtn);
+            this.setActiveButton(selectBtn, true);
             this.closeAllPanels();
             Game.setBuildMode('select');
         });
 
         const demolishBtn = document.getElementById('btn-demolish');
         if(demolishBtn) demolishBtn.addEventListener('click', () => {
-            this.setActiveButton(demolishBtn);
+            this.setActiveButton(demolishBtn, true);
             this.closeAllPanels();
             Game.setBuildMode('demolish');
         });
         
+        // Botões do HUD
         const exitGameBtn = document.getElementById('exit-game-btn');
         if (exitGameBtn) exitGameBtn.addEventListener('click', () => window.location.reload());
         
@@ -41,7 +45,7 @@ const UI = {
             Game.togglePowerOverlay();
         });
 
-        this.setActiveButton(selectBtn);
+        this.setActiveButton(selectBtn, true);
     },
     
     togglePanel: function(panelId) {
@@ -61,8 +65,16 @@ const UI = {
         this.activePanel = null;
     },
     
-    setActiveButton: function(clickedButton) {
-        document.querySelectorAll('.ui-button.active').forEach(btn => btn.classList.remove('active'));
+    setActiveButton: function(clickedButton, clearAll) {
+        // Se clearAll for true, limpa todos os botões ativos
+        if (clearAll) {
+            document.querySelectorAll('.ui-button.active').forEach(btn => btn.classList.remove('active'));
+        }
+        // Se não, limpa apenas os botões de ferramentas (não os de categoria)
+        else {
+             document.querySelectorAll('.submenu-panel .ui-button.active').forEach(btn => btn.classList.remove('active'));
+        }
+        
         if (clickedButton) clickedButton.classList.add('active');
     }
 };
