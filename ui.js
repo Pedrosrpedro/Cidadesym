@@ -33,6 +33,14 @@ const UI = {
             this.closeAllPanels();
             Game.setBuildMode('demolish');
         });
+
+const waterOverlayBtn = document.getElementById('water-overlay-btn');
+if (waterOverlayBtn) {
+    waterOverlayBtn.addEventListener('click', () => {
+        waterOverlayBtn.classList.toggle('active');
+        Game.toggleWaterOverlay(); // Nova função que vamos criar no Game
+    });
+}
         
         // Botões do HUD
         const exitGameBtn = document.getElementById('exit-game-btn');
