@@ -138,7 +138,6 @@ const Game = {
         this.scene.add(this.powerOverlay);
     },
 
-    // CORREÇÃO: Lógica de geração de terreno refeita para mais naturalidade.
     createIslandTerrain: function() {
         const segments = 128;
         const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments);
@@ -153,7 +152,6 @@ const Game = {
         const center = new THREE.Vector2(0, 0);
         const maxDist = this.gridWorldSize / 2;
         
-        // Parâmetros ajustados para um relevo mais interessante
         const baseHeight = 15.0; 
         const maxAmplitude = 60.0;
 
@@ -164,7 +162,6 @@ const Game = {
             let noise = 0;
             let frequency = 2.0 / this.gridWorldSize;
             let amplitude = maxAmplitude;
-            // 4 oitavas de ruído para mais detalhes
             for (let j = 0; j < 4; j++) {
                 noise += Noise.perlin2(x * frequency, z * frequency) * amplitude;
                 frequency *= 2.2; 
@@ -172,23 +169,20 @@ const Game = {
             }
 
             const dist = center.distanceTo(new THREE.Vector2(x, z));
-            // Nova função de falloff que faz a ilha descer até y=0 nas bordas.
             const falloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.5);
 
-            // A altura é o resultado do ruído, multiplicado pelo falloff para criar a forma da ilha.
             let height = (baseHeight + noise) * falloff;
             
             vertices.setZ(i, height);
 
-            // Novas faixas de cor para um visual mais rico
             if (height < 6) {
-                colors.push(sandColor.r, sandColor.g, sandColor.b); // Praia
+                colors.push(sandColor.r, sandColor.g, sandColor.b);
             } else if (height < 35) {
-                colors.push(grassColor.r, grassColor.g, grassColor.b); // Grama
+                colors.push(grassColor.r, grassColor.g, grassColor.b);
             } else if (height < 50) {
-                 colors.push(rockColor.r, rockColor.g, rockColor.b); // Rocha
+                 colors.push(rockColor.r, rockColor.g, rockColor.b);
             } else {
-                 colors.push(snowColor.r, snowColor.g, snowColor.b); // Neve
+                 colors.push(snowColor.r, snowColor.g, snowColor.b);
             }
         }
         
@@ -230,7 +224,6 @@ const Game = {
         document.getElementById('power-overlay-btn')?.addEventListener('click', () => this.togglePowerOverlay());
         
         const canvas = this.renderer.domElement;
-        // Passa o evento 'e' para a função updateCursor
         canvas.addEventListener('mousemove', (e) => this.updateCursor(e));
         canvas.addEventListener('click', () => this.handleMapClick());
         
@@ -242,20 +235,16 @@ const Game = {
         });
     },
 
-    // CORREÇÃO: Leitura do mouse refeita para ser precisa.
     updateCursor: function(e) {
         if (!this.buildCursor.visible) {
             this.terraformCursor.visible = false;
             return;
         }
 
-        // Pega a posição e tamanho do canvas na tela
         const rect = this.renderer.domElement.getBoundingClientRect();
-        // Calcula a posição do mouse relativa ao canvas
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // Normaliza as coordenadas do mouse para o espaço do Three.js (-1 a +1)
         this.mouse.x = (x / rect.width) * 2 - 1;
         this.mouse.y = -(y / rect.height) * 2 + 1;
         
@@ -269,7 +258,6 @@ const Game = {
             const snappedX = gridX * this.gridSize;
             const snappedZ = gridZ * this.gridSize;
             
-            // Usamos a altura real do ponto de intersecção para maior precisão
             const terrainHeight = intersects[0].point.y; 
             
             this.buildCursor.position.set(snappedX, terrainHeight + 0.25, snappedZ);
@@ -278,7 +266,6 @@ const Game = {
             this.terraformCursor.visible = needsTerraformingCursor;
             if (needsTerraformingCursor) {
                 this.terraformCursor.position.set(snappedX, terrainHeight + 0.05, snappedZ);
-                 // Muda a cor do cursor de terraformagem para indicar a ação
                 if(this.buildMode === 'terraform-raise') this.terraformCursor.material.color.set(0x00ff00);
                 else if(this.buildMode === 'terraform-lower') this.terraformCursor.material.color.set(0xff0000);
                 else this.terraformCursor.material.color.set(0xdaa520);
@@ -368,7 +355,6 @@ const Game = {
     },
 
     handleLinePlacement: function() {
-        // Usa a posição exata do cursor, que agora está correta.
         const currentPos = this.buildCursor.position.clone();
         if (this.buildMode === 'road-curved') {
             this.currentCurvePoints.push(currentPos);
@@ -411,46 +397,71 @@ const Game = {
             }
         } 
     },
-    
-    // As funções abaixo (createRoadObject, etc.) não precisam de grandes mudanças,
-    // pois o erro estava na entrada (posição do clique) e não na sua lógica interna.
-    // O restante do seu código pode permanecer como estava na versão anterior.
-    
+
     cancelCurvedRoad: function() {
         this.curveGuideMeshes.forEach(mesh => this.scene.remove(mesh));
         this.curveGuideMeshes = [];
         this.currentCurvePoints = [];
     },
     
+    // CORREÇÃO: Função de criação de estrada refeita para gerar a malha manualmente.
     createRoadObject: function(points) {
         const pointsWithTerrainHeight = points.map(p => {
             const point = p.clone();
-            point.y = this.getTerrainHeight(p.x, p.z) + 0.1;
+            // Adiciona um pequeno offset para garantir que a estrada fique sobre o terreno
+            point.y = this.getTerrainHeight(p.x, p.z) + 0.1; 
             return point;
         });
 
         const curve = new THREE.CatmullRomCurve3(pointsWithTerrainHeight);
+        // Pega pontos suficientes ao longo da curva para uma boa resolução
+        const curvePoints = curve.getPoints(Math.max(50, Math.floor(curve.getLength() * 1.5)));
         const roadWidth = this.gridSize * 0.8;
-        const tubularSegments = Math.max(64, Math.floor(curve.getLength() * 2));
 
-        const roadShape = new THREE.Shape([
-            new THREE.Vector2(-roadWidth / 2, 0),
-            new THREE.Vector2(roadWidth / 2, 0)
-        ]);
+        const roadVertices = [];
+        const roadIndices = [];
+        const up = new THREE.Vector3(0, 1, 0); // Define a direção "para cima"
 
-        const extrudeSettings = {
-            steps: tubularSegments,
-            bevelEnabled: false,
-            extrudePath: curve
-        };
+        // Itera por cada ponto da curva para criar um "tapete" de vértices
+        for (let i = 0; i < curvePoints.length; i++) {
+            const point = curvePoints[i];
+            const tangent = curve.getTangentAt(i / (curvePoints.length - 1));
+            
+            // Calcula um vetor lateral, perpendicular à direção da estrada e ao vetor "up"
+            const side = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-        const geo = new THREE.ExtrudeGeometry(roadShape, extrudeSettings);
+            // Cria os vértices esquerdo e direito da estrada
+            const v1 = point.clone().add(side.clone().multiplyScalar(roadWidth / 2));
+            const v2 = point.clone().add(side.clone().multiplyScalar(-roadWidth / 2));
+            
+            roadVertices.push(v1.x, v1.y, v1.z);
+            roadVertices.push(v2.x, v2.y, v2.z);
+        }
+
+        // Cria os triângulos (faces) que conectam os vértices
+        for (let i = 0; i < curvePoints.length - 1; i++) {
+            const p1_prev = i * 2;
+            const p2_prev = i * 2 + 1;
+            const p1_curr = (i + 1) * 2;
+            const p2_curr = (i + 1) * 2 + 1;
+
+            // Primeiro triângulo do segmento
+            roadIndices.push(p1_prev, p2_prev, p1_curr);
+            // Segundo triângulo do segmento
+            roadIndices.push(p2_prev, p2_curr, p1_curr);
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(roadVertices, 3));
+        geo.setIndex(roadIndices);
+        geo.computeVertexNormals(); // Calcula as normais para iluminação correta
+
         const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const mesh = new THREE.Mesh(geo, mat);
         
         mesh.userData = { 
             type: 'road-unified', 
-            points: curve.getPoints(tubularSegments)
+            points: curvePoints // Salva os pontos para terraplanagem e interseções
         };
         
         this.terraformArea(mesh);
