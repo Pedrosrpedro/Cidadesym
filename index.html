@@ -18,7 +18,15 @@
                 <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
             </ul>
         </nav>
-        <span class="version">v1.7.0</span> <!-- Versão atualizada -->
+        <span class="version">v1.8.0</span>
+    </div>
+
+    <!-- TELA DE CARREGAMENTO -->
+    <div id="loading-screen" class="hidden">
+        <div class="loading-content">
+            <h1>Carregando Cidade...</h1>
+            <div class="spinner"></div>
+        </div>
     </div>
 
     <!-- Container do Jogo -->
@@ -27,10 +35,10 @@
              <button id="exit-game-btn">Voltar ao Menu</button>
              <button id="camera-mode-btn">[Mover]</button>
              <button id="power-overlay-btn">Rede Elétrica</button>
-            <button id="water-overlay-btn">Rede de Água</button>
+             <button id="water-overlay-btn">Rede de Água</button>
              <div id="info-bar">
                 <span id="power-info">ENERGIA: 0 / 0 MW</span>
-                 <span id="population-info">HABITANTES: 0</span>
+                <span id="population-info">HABITANTES: 0</span>
              </div>
         </div>
         <div id="joystick-zone"></div>
@@ -52,7 +60,7 @@
             <button class="ui-button" data-build-mode="road">Estrada Reta</button>
             <button class="ui-button" data-build-mode="road-curved">Estrada Curva</button>
         </div>
-        <div id="panel-water" class="submenu-panel hidden">
+        <div id="panel-water" class.submenu-panel hidden">
             <button class="ui-button" data-build-mode="water-pump">Bomba d'Água</button>
             <button class="ui-button" data-build-mode="sewage-plant">Trat. Esgoto</button>
             <button class="ui-button" data-build-mode="pipe">Encanamento</button>
@@ -68,7 +76,6 @@
             <button class="ui-button main-tool-btn" data-panel="panel-zones">Zonas</button>
             <button class="ui-button main-tool-btn" data-panel="panel-power">Energia</button>
             <button class="ui-button main-tool-btn" data-panel="panel-transport">Transporte</button>
-            <!-- CORREÇÃO DO BOTÃO DE ÁGUA -->
             <button class="ui-button main-tool-btn" data-panel="panel-water">Água</button>
             <button class="ui-button main-tool-btn" data-panel="panel-terrain">Terraformar</button>
             <button id="btn-demolish" class="ui-button">Demolir</button>
@@ -84,17 +91,18 @@
     </div>
     <button id="debug-toggle-btn">Console</button>
 
-        <!-- Scripts -->
+    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     
-    <!-- Seus scripts - ORDEM CORRIGIDA -->
+    <!-- Seus scripts - ORDEM CORRETA E FINAL -->
     <script src="console.js" defer></script>
-    <!-- game.js DEVE vir ANTES de ui.js e main.js -->
+    <!-- game.js e ui.js precisam ser DEFINIDOS antes de serem usados -->
     <script src="game.js" defer></script> 
     <script src="ui.js" defer></script>
+    <!-- menu.js também é apenas uma definição -->
     <script src="menu.js" defer></script>
+    <!-- main.js é o último, pois ele vai "orquestrar" os outros -->
     <script src="main.js" defer></script>
-
-    </body>
+</body>
 </html>
