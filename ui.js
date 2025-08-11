@@ -3,7 +3,6 @@ const UI = {
     activePanel: null,
     
     init: function() {
-        // Botões que abrem painéis
         document.querySelectorAll('.main-tool-btn').forEach(button => {
             button.addEventListener('click', () => {
                 this.setActiveButton(button);
@@ -11,7 +10,6 @@ const UI = {
             });
         });
 
-        // Botões dentro dos painéis
         document.querySelectorAll('.submenu-panel .ui-button').forEach(button => {
             button.addEventListener('click', () => {
                 this.setActiveButton(button);
@@ -20,7 +18,6 @@ const UI = {
             });
         });
         
-        // Botões de ação direta
         const selectBtn = document.getElementById('btn-select');
         if(selectBtn) selectBtn.addEventListener('click', () => {
             this.setActiveButton(selectBtn);
@@ -35,7 +32,6 @@ const UI = {
             Game.setBuildMode('demolish');
         });
         
-        // Botões do HUD
         const exitGameBtn = document.getElementById('exit-game-btn');
         if (exitGameBtn) exitGameBtn.addEventListener('click', () => window.location.reload());
         
@@ -45,7 +41,7 @@ const UI = {
             Game.togglePowerOverlay();
         });
 
-        this.setActiveButton(selectBtn); // Inicia com o botão "Selecionar" ativo
+        this.setActiveButton(selectBtn);
     },
     
     togglePanel: function(panelId) {
