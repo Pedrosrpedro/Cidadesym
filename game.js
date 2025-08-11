@@ -5,22 +5,27 @@ const Game = {
     buildCursor: null, raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(),
     joystick: null, moveDirection: { x: 0, z: 0 }, moveSpeed: 0.5, rotateSpeed: 0.02,
     gridSize: 10, isDrawing: false, startPoint: null,
-
-    // NOVO: Gerenciamento da cidade e da rede elétrica
-    cityObjects: [],
-    powerProducers: [],
-    powerConsumers: [],
-    powerLines: [],
+    cityObjects: [], powerProducers: [], powerConsumers: [], powerLines: [],
     powerOverlay: null,
-    lastGridUpdateTime: 0,
     
     init: function() {
         if (this.isInitialized) return;
-        this.setupScene();
-        this.setupControls();
-        this.animate = this.animate.bind(this);
-        this.animate();
-        this.isInitialized = true;
+        DebugConsole.log("Game.init: Iniciando...");
+        if (typeof THREE === 'undefined') { DebugConsole.error("Game.init: Three.js NÃO carregado!"); return; }
+        DebugConsole.log("Game.init: Three.js OK.");
+        if (typeof nipplejs === 'undefined') { DebugConsole.error("Game.init: NippleJS NÃO carregado!"); return; }
+        DebugConsole.log("Game.init: NippleJS OK.");
+
+        try {
+            this.setupScene();
+            this.setupControls();
+            this.animate = this.animate.bind(this);
+            this.animate();
+            this.isInitialized = true;
+            DebugConsole.log("Game.init: JOGO INICIADO COM SUCESSO!");
+        } catch (err) {
+            DebugConsole.error("Game.init: ERRO CRÍTICO: " + err.stack);
+        }
     },
     
     setupScene: function() {
@@ -47,7 +52,6 @@ const Game = {
         this.buildCursor = new THREE.Mesh(cursorGeo, cursorMat);
         this.buildCursor.visible = false; this.scene.add(this.buildCursor);
 
-        // Cria o grupo para o overlay de energia
         this.powerOverlay = new THREE.Group();
         this.powerOverlay.visible = false;
         this.scene.add(this.powerOverlay);
@@ -116,9 +120,9 @@ const Game = {
         if (this.buildMode.startsWith('road')) {
             geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
             mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-        } else { // power-line
+        } else {
             geo = new THREE.CylinderGeometry(0.5, 0.5, length, 6);
-            mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Cor de madeira
+            mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
         }
         
         const mesh = new THREE.Mesh(geo, mat);
@@ -171,16 +175,12 @@ const Game = {
     },
 
     updatePowerGrid: function() {
-        console.log("Atualizando rede elétrica...");
-        // Resetar todos
         this.powerConsumers.forEach(c => { c.userData.isPowered = false; c.material.color.set(0x808080); });
         this.powerLines.forEach(l => { l.userData.isPowered = false; });
         this.powerOverlay.clear();
         
-        // Energizar a partir das usinas
         this.powerProducers.forEach(producer => {
             const radius = producer.userData.powerRadius;
-            // Adiciona o círculo azul ao overlay
             const circleGeo = new THREE.CircleGeometry(radius, 32);
             const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
             const circleMesh = new THREE.Mesh(circleGeo, circleMat);
@@ -189,7 +189,6 @@ const Game = {
             circleMesh.rotation.x = -Math.PI / 2;
             this.powerOverlay.add(circleMesh);
 
-            // Energiza consumidores e linhas no raio
             [...this.powerConsumers, ...this.powerLines].forEach(obj => {
                 if (obj.position.distanceTo(producer.position) < radius) {
                     obj.userData.isPowered = true;
@@ -197,13 +196,12 @@ const Game = {
             });
         });
         
-        // TODO: Propagar energia pelas linhas (lógica mais complexa para o futuro)
-
-        // Atualiza a cor dos consumidores
         this.powerConsumers.forEach(c => {
             if (c.userData.isPowered) {
-                if(c.userData.type === 'residential') c.material.color.set(0x34A853);
-                else c.material.color.set(0x4285F4);
+                if(c.userData.type === 'consumer' && c.material.color.getHexString() === '808080') {
+                    // Restaura a cor original
+                    if (this.powerConsumers.includes(c)) c.material.color.set(c.userData.originalColor || (this.buildMode === 'residential' ? 0x34A853 : 0x4285F4));
+                }
             }
         });
     },
