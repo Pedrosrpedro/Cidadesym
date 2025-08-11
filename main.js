@@ -1,71 +1,56 @@
-// main.js - VERSÃO FINAL COM TELA DE CARREGAMENTO
+// main.js - VERSÃO DE LIMPEZA E DIAGNÓSTICO
 
+// A função só roda quando o HTML está pronto.
 window.addEventListener('DOMContentLoaded', () => {
     
-    // 1. Inicializa sistemas que não dependem do jogo, como o console.
+    // Mostra no console que este é o script correto que está rodando.
+    console.log("======= EXECUTANDO main.js (versão de diagnóstico) =======");
+
+    // 1. Inicializa o console de debug primeiro.
     DebugConsole.init();
+    DebugConsole.log("main.js: DOM carregado. Console pronto.");
 
-    // 2. Pega os elementos da DOM que vamos manipular.
-    const mainMenu = document.getElementById('main-menu');
-    const gameContainer = document.getElementById('game-container');
-    const bottomBar = document.getElementById('bottom-bar');
-    const loadingScreen = document.getElementById('loading-screen'); // Nossa nova tela
+    // 2. Pega os elementos do menu.
     const newGameBtn = document.getElementById('new-game-btn');
-    const optionsBtn = document.getElementById('options-btn');
-    const sairBtn = document.getElementById('exit-btn');
-
-    if (!newGameBtn || !loadingScreen) {
-        DebugConsole.error("CRÍTICO: Elementos essenciais (Novo Jogo ou Tela de Carregamento) não encontrados.");
+    if (!newGameBtn) {
+        DebugConsole.error("CRÍTICO: Botão 'Novo Jogo' não foi encontrado. Verifique o HTML.");
         return;
     }
 
-    DebugConsole.log("Sistema pronto. Clique em 'Novo Jogo' para começar.");
-
-    // 3. Adiciona o listener para o botão "Novo Jogo"
+    // 3. Adiciona o listener de clique para iniciar o jogo.
     newGameBtn.addEventListener('click', (e) => {
         e.preventDefault();
         
-        // Esconde o menu e mostra a interface do jogo e A TELA DE CARREGAMENTO
-        mainMenu.classList.add('hidden');
-        gameContainer.classList.remove('hidden');
-        bottomBar.classList.remove('hidden');
+        DebugConsole.log("main.js: Botão 'Novo Jogo' clicado!");
+
+        // Mostra a interface do jogo e a tela de carregamento.
+        document.getElementById('main-menu').classList.add('hidden');
+        document.getElementById('game-container').classList.remove('hidden');
+        document.getElementById('bottom-bar').classList.remove('hidden');
+        const loadingScreen = document.getElementById('loading-screen');
         loadingScreen.classList.remove('hidden');
 
-        // --- O TRUQUE PARA O CARREGAMENTO FUNCIONAR ---
-        // Usamos um setTimeout para dar ao navegador um momento para renderizar
-        // a tela de carregamento ANTES de começar o trabalho pesado de Game.init().
+        // Usa o setTimeout para garantir que a tela de carregamento apareça.
         setTimeout(() => {
             try {
-                // Dentro do setTimeout, agora fazemos o trabalho pesado:
-                Game.init(); // Carrega o terreno, cria a cena, etc.
-                UI.init();   // Prepara todos os botões da UI do jogo.
-                
-                // Depois que tudo foi carregado e inicializado com sucesso...
-                DebugConsole.log("Cidade carregada. Bem-vindo!");
+                DebugConsole.log("main.js: INICIANDO O JOGO...");
+                // ORDEM CRÍTICA: Primeiro o Game, depois a UI.
+                Game.init();
+                UI.init();
+                DebugConsole.log("main.js: JOGO INICIADO COM SUCESSO!");
 
             } catch (error) {
-                // Se algo der errado durante a inicialização, mostramos no console.
                 DebugConsole.error(`Falha crítica durante a inicialização: ${error.message}`);
             } finally {
-                // ...escondemos a tela de carregamento, revelando o jogo.
                 loadingScreen.classList.add('hidden');
             }
-        }, 100); // Um pequeno delay de 100ms é suficiente.
+        }, 100);
     });
 
-    // Configura os outros botões do menu
-    optionsBtn?.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => console.error(err));
-        } else {
-            document.exitFullscreen();
-        }
-    });
+    // Configura os outros botões do menu.
+    const optionsBtn = document.getElementById('options-btn');
+    optionsBtn?.addEventListener('click', () => document.documentElement.requestFullscreen().catch(err => console.error(err)));
 
-    sairBtn?.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (confirm('Tem certeza de que deseja sair?')) alert('Obrigado por jogar!');
-    });
-
+    const exitBtn = document.getElementById('exit-btn');
+    exitBtn?.addEventListener('click', () => confirm('Tem certeza?') && alert('Obrigado por jogar!'));
 });
