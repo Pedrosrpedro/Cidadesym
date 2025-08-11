@@ -8,8 +8,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Menu Principal (sem alterações) -->
-    <div id="main-menu" class="menu-sidebar"> ... </div>
+    <!-- Menu Principal -->
+    <div id="main-menu" class="menu-sidebar">
+        <h1 class="game-title">CidadeSym</h1>
+        <nav class="menu-nav">
+            <ul>
+                <li><a href="#" id="new-game-btn" class="menu-button">Novo Jogo</a></li>
+                <li><a href="#" id="options-btn" class="menu-button">Tela Cheia</a></li>
+                <li><a href="#" id="exit-btn" class="menu-button">Sair</a></li>
+            </ul>
+        </nav>
+        <span class="version">v1.5.0</span>
+    </div>
 
     <!-- Container do Jogo -->
     <div id="game-container" class="hidden">
@@ -17,7 +27,6 @@
              <button id="exit-game-btn">Voltar ao Menu</button>
              <button id="camera-mode-btn">[Mover]</button>
              <button id="power-overlay-btn">Rede Elétrica</button>
-             <!-- NOVO: Barra de Informações -->
              <div id="info-bar">
                 <span id="power-info">ENERGIA: 0 / 0 MW</span>
              </div>
@@ -25,14 +34,49 @@
         <div id="joystick-zone"></div>
     </div>
 
-    <!-- Barra de Ferramentas Inferior (sem alterações) -->
-    <div id="bottom-bar" class="hidden"> ... </div>
+    <!-- Barra de Ferramentas Inferior -->
+    <div id="bottom-bar" class="hidden">
+        <!-- PAINÉIS DE SUBMENU (ficam acima da barra principal) -->
+        <div id="panel-zones" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="residential">Residencial</button>
+            <button class="ui-button" data-build-mode="commercial">Comercial</button>
+        </div>
+        <div id="panel-power" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="power-wind">Eólica</button>
+            <button class="ui-button" data-build-mode="power-coal">Carvão</button>
+        </div>
+         <div id="panel-transport" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="road">Estrada</button>
+            <button class="ui-button" data-build-mode="power-line">Postes</button>
+        </div>
 
-    <!-- Scripts (sem alterações) -->
+        <!-- BARRA PRINCIPAL -->
+        <div id="main-toolbar">
+            <button id="btn-select" class="ui-button">Selecionar</button>
+            <button class="ui-button main-tool-btn" data-panel="panel-zones">Zonas</button>
+            <button class="ui-button main-tool-btn" data-panel="panel-power">Energia</button>
+            <button class="ui-button main-tool-btn" data-panel="panel-transport">Transporte</button>
+            <button id="btn-demolish" class="ui-button">Demolir</button>
+        </div>
+    </div>
+
+    <!-- Console de Debug -->
+    <div id="debug-console-container" class="hidden">
+        <div id="debug-header">
+            <h3>Console de Debug</h3>
+        </div>
+        <div id="debug-log"></div>
+    </div>
+    <button id="debug-toggle-btn">Console</button>
+
+    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+    
+    <!-- Seus scripts -->
+    <script src="console.js"></script>
     <script src="ui.js"></script>
-    <script src="game.js"></script>
+    <script src="game.js"></script> <!-- Inclua o game.js com a correção anterior -->
     <script src="menu.js"></script>
     <script src="main.js"></script>
 </body>
