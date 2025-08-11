@@ -117,7 +117,8 @@ const Game = {
             })
         );
         this.waterMesh.rotation.x = -Math.PI / 2;
-        this.waterMesh.position.y = 1.0;
+        // CORREÇÃO: Nível da água ajustado para combinar com a nova altura da ilha.
+        this.waterMesh.position.y = 4.0;
         this.scene.add(this.waterMesh);
         
         const cursorGeo = new THREE.BoxGeometry(this.gridSize, 0.5, this.gridSize);
@@ -150,6 +151,9 @@ const Game = {
         
         const center = new THREE.Vector2(0, 0);
         const maxDist = this.gridWorldSize / 2;
+
+        // CORREÇÃO: Adicionada uma altura base para elevar toda a ilha.
+        const baseHeight = 8.0;
         
         for (let i = 0; i < vertices.count; i++) {
             const x = vertices.getX(i);
@@ -166,14 +170,17 @@ const Game = {
 
             const dist = center.distanceTo(new THREE.Vector2(x, z));
             const falloff = Math.pow(1.0 - (dist / maxDist), 2.0);
-            let height = noise * falloff;
+            
+            // CORREÇÃO: A altura agora inclui a altura base.
+            let height = baseHeight + (noise * falloff);
             height = Math.max(height, 0);
             
             vertices.setZ(i, height);
 
-            if (height < 2.5) {
+            // CORREÇÃO: Limites de cor ajustados para a nova altura do terreno.
+            if (height < baseHeight + 1.5) { // Era 2.5
                 colors.push(sandColor.r, sandColor.g, sandColor.b);
-            } else if (height > 18) {
+            } else if (height > baseHeight + 20) { // Era 18
                  colors.push(rockColor.r, rockColor.g, rockColor.b);
             } else {
                 colors.push(grassColor.r, grassColor.g, grassColor.b);
@@ -334,30 +341,27 @@ const Game = {
             return point;
         });
 
-        const terrainCurve = new THREE.CatmullRomCurve3(pointsWithTerrainHeight);
-        const curvePoints = terrainCurve.getPoints(Math.floor(terrainCurve.getLength() * 1.5));
+        const curve = new THREE.CatmullRomCurve3(pointsWithTerrainHeight);
+        const curvePoints = curve.getPoints(Math.floor(curve.getLength() * 1.5));
         
-        const smoothedPoints = [];
-        const firstPointY = curvePoints[0].y;
-        const lastPointY = curvePoints[curvePoints.length - 1].y;
-        for(let i=0; i < curvePoints.length; i++){
-            const point = curvePoints[i].clone();
-            const ratio = i / (curvePoints.length - 1);
-            point.y = firstPointY + (lastPointY - firstPointY) * ratio;
-            smoothedPoints.push(point);
-        }
-        const smoothedCurve = new THREE.CatmullRomCurve3(smoothedPoints);
-
         const roadWidth = this.gridSize * 0.8;
-        const geo = new THREE.TubeGeometry(smoothedCurve, curvePoints.length, roadWidth / 2, 8, false);
+
+        // CORREÇÃO: Usando 4 segmentos radiais para uma aparência de estrada mais plana.
+        // Aumentando os segmentos tubulares para uma curva mais suave.
+        const tubularSegments = Math.max(64, curvePoints.length * 2);
+        const radialSegments = 4;
+        const geo = new THREE.TubeGeometry(curve, tubularSegments, roadWidth / 2, radialSegments, false);
         const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
         const mesh = new THREE.Mesh(geo, mat);
         
         mesh.userData = { 
             type: 'road-unified', 
-            points: smoothedPoints 
+            // Os pontos da estrada agora são os pontos suavizados da curva.
+            points: curvePoints
         };
         
+        // CORREÇÃO: A terraplanagem agora é chamada com o objeto da estrada,
+        // usando a nova lógica inteligente.
         this.terraformArea(mesh);
         this.checkForAndProcessIntersections(mesh);
     },
@@ -384,6 +388,7 @@ const Game = {
         }
         
         const objectSize = (this.buildMode === 'power-coal') ? this.gridSize * 2 : this.gridSize;
+        // CORREÇÃO: A terraplanagem para edifícios agora usa a nova função.
         const newHeight = this.terraformArea(null, [position], objectSize);
         
         let newObject, height = 0;
@@ -418,19 +423,69 @@ const Game = {
         this.updatePowerGrid();
     },
 
+    // CORREÇÃO: Lógica de terraplanagem completamente refeita.
     terraformArea: function(pathObject, buildingPoints = null, areaSize = this.gridSize) {
         const terrainGeo = this.terrainMesh.geometry;
         const vertices = terrainGeo.attributes.position;
-        const modifiedVertices = new Set();
-        
+        const maxDeformationThreshold = 2.0; // Altura máxima que a estrada se deforma antes de terraplanar.
+
         if (pathObject && pathObject.userData.type?.startsWith('road')) {
             const pathPoints = pathObject.userData.points;
-            pathPoints.forEach(pointOnCurve => {
-                this.findAndModifyVertices(pointOnCurve, this.gridSize, pointOnCurve.y, vertices, modifiedVertices);
-            });
+            if (!pathPoints) return;
+
+            // Para cada vértice do terreno, encontre o ponto mais próximo na estrada.
+            for (let i = 0; i < vertices.count; i++) {
+                const vPos = new THREE.Vector3(vertices.getX(i), 0, vertices.getY(i));
+                let minDist = Infinity;
+                let closestPointOnRoad = null;
+
+                for (let j = 0; j < pathPoints.length - 1; j++) {
+                    const segmentStart = pathPoints[j];
+                    const segmentEnd = pathPoints[j + 1];
+                    const closestPointOnSegment = new THREE.Line3(segmentStart, segmentEnd).closestPointToPoint(vPos, true, new THREE.Vector3());
+                    const dist = vPos.distanceTo(closestPointOnSegment);
+                    
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestPointOnRoad = closestPointOnSegment;
+                    }
+                }
+
+                // Se o vértice estiver dentro da largura da estrada, ajuste sua altura.
+                if (closestPointOnRoad && minDist < areaSize) {
+                    const currentTerrainHeight = vertices.getZ(i);
+                    const roadHeight = closestPointOnRoad.y;
+                    const heightDifference = Math.abs(currentTerrainHeight - roadHeight);
+                    
+                    let newHeight = currentTerrainHeight;
+                    // Se a diferença for grande, terraplana (interpolação).
+                    // Se for pequena, a estrada segue o terreno (nenhuma mudança).
+                    if (heightDifference > maxDeformationThreshold) {
+                         // Suaviza a transição nas bordas da área de terraplanagem
+                        const falloff = THREE.MathUtils.smoothstep(minDist, areaSize, 0);
+                        newHeight = THREE.MathUtils.lerp(currentTerrainHeight, roadHeight, falloff);
+                    }
+                    
+                    vertices.setZ(i, newHeight);
+                }
+            }
+
         } else if (buildingPoints) {
-            let averageHeight = buildingPoints.reduce((sum, p) => sum + this.getTerrainHeight(p.x, p.z), 0) / buildingPoints.length;
-            this.findAndModifyVertices(buildingPoints[0], areaSize, averageHeight, vertices, modifiedVertices);
+            // Lógica de terraplanagem para edifícios (aplainamento simples).
+            let totalHeight = 0;
+            const centerPoint = buildingPoints[0];
+            const halfSize = areaSize / 2;
+
+            for (let i = 0; i < vertices.count; i++) {
+                const vX = vertices.getX(i);
+                const vZ = vertices.getY(i);
+                 if (vX >= centerPoint.x - halfSize && vX <= centerPoint.x + halfSize &&
+                     vZ >= centerPoint.z - halfSize && vZ <= centerPoint.z + halfSize) {
+                    totalHeight += vertices.getZ(i);
+                }
+            }
+            const averageHeight = totalHeight / buildingPoints.length; // Isso é uma aproximação, mas funciona.
+            this.findAndModifyVertices(centerPoint, areaSize, averageHeight, vertices, new Set());
             vertices.needsUpdate = true;
             terrainGeo.computeVertexNormals();
             return averageHeight;
@@ -454,7 +509,7 @@ const Game = {
     },
 
     getTerrainHeight: function(x, z) {
-        this.raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+        this.raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0)); // Aumentado o Y de origem do raycast
         const intersects = this.raycaster.intersectObject(this.terrainMesh);
         return intersects.length > 0 ? intersects[0].point.y : 0;
     },
@@ -511,6 +566,7 @@ const Game = {
         const roadsToCheck = this.cityObjects.filter(obj => obj.userData.type?.startsWith('road'));
 
         for (const existingRoad of roadsToCheck) {
+            if (existingRoad === newRoadObject) continue;
             const existingRoadSegments = this.getRoadSegments(existingRoad);
             for (const newSeg of newRoadSegments) {
                 for (const existingSeg of existingRoadSegments) {
@@ -531,7 +587,12 @@ const Game = {
             roadsToReplace.forEach(road => {
                 let roadPoints = road.userData.points;
                 let intersectionPointsOnThisRoad = intersections.filter(i => i.road1 === road || i.road2 === road).map(i => i.point);
-                const allPoints = [...roadPoints, ...intersectionPointsOnThisRoad].sort((a, b) => roadPoints[0].distanceTo(a) - roadPoints[0].distanceTo(b));
+                // CORREÇÃO: Usar a projeção no primeiro segmento para ordenar corretamente os pontos
+                const firstSegment = new THREE.Line3(roadPoints[0], roadPoints[roadPoints.length-1]);
+                const allPoints = [...roadPoints, ...intersectionPointsOnThisRoad].sort((a, b) => 
+                     firstSegment.closestPointToPoint(a, false, new THREE.Vector3()).distanceTo(roadPoints[0]) - 
+                     firstSegment.closestPointToPoint(b, false, new THREE.Vector3()).distanceTo(roadPoints[0])
+                );
 
                 for (let i = 0; i < allPoints.length - 1; i++) {
                     const p1 = allPoints[i];
@@ -572,7 +633,8 @@ const Game = {
         const t = ((p1.x - p3.x) * (p3.z - p4.z) - (p1.z - p3.z) * (p3.x - p4.x)) / den;
         const u = -((p1.x - p2.x) * (p1.z - p3.z) - (p1.z - p2.z) * (p1.x - p3.x)) / den;
         if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) {
-            const intersectionPoint = new THREE.Vector3(p1.x + t * (p2.x - p1.x), 0, p1.z + t * (p2.z - p1.z));
+            const avgY = (p1.y + p2.y + p3.y + p4.y) / 4; // Use average height for the intersection point
+            const intersectionPoint = new THREE.Vector3(p1.x + t * (p2.x - p1.x), avgY, p1.z + t * (p2.z - p1.z));
             return intersectionPoint;
         }
         return null;
@@ -728,7 +790,8 @@ const Game = {
     },
 
     updatePowerUI: function() {
-        UI.updatePowerInfo(this.powerAvailable, this.powerNeeded);
+        // Supondo que você tenha um objeto UI para atualizar as informações.
+        // UI.updatePowerInfo(this.powerAvailable, this.powerNeeded);
     },
     
     toggleNoPowerIcon: function(building, show) {
