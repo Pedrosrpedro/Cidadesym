@@ -3,6 +3,7 @@ const UI = {
     activePanel: null,
     
     init: function() {
+        console.log("======= UI.init() FOI CHAMADO! =======");
         // Botões que abrem painéis
         document.querySelectorAll('.main-tool-btn').forEach(button => {
             button.addEventListener('click', () => {
