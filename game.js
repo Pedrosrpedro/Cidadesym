@@ -127,7 +127,33 @@ const Game = {
     
     // ... (funções setBuildMode, setupControls, updateCursor, etc. sem grandes alterações)...
     setBuildMode: function(mode) { if(this.buildMode === 'road-curved' && this.currentCurvePoints.length > 0) { this.cancelCurvedRoad(); } this.buildMode = mode; this.buildCursor.visible = (mode !== 'select'); this.isDrawing = false; this.startPoint = null; if (this.temporaryPole) { this.scene.remove(this.temporaryPole); this.temporaryPole = null; } },
-    setupControls: function() { const options = { zone: document.getElementById('joystick-zone'), mode: 'static', position: { left: '50%', top: '50%' }, color: 'cyan', size: 120 }; this.joystick = nipplejs.create(options); this.joystick.on('move', (evt, data) => { const angle = data.angle.radian; const force = data.force; this.moveDirection.x = Math.cos(angle) * force; this.moveDirection.z = -Math.sin(angle) * force; }).on('end', () => { this.moveDirection.x = 0; this.moveDirection.z = 0; }); },
+// Em game.js
+setupControls: function() {
+    const options = { zone: document.getElementById('joystick-zone'), mode: 'static', position: { left: '50%', top: '50%' }, color: 'cyan', size: 120 };
+    this.joystick = nipplejs.create(options);
+    this.joystick.on('move', (evt, data) => {
+        const angle = data.angle.radian; const force = data.force;
+        this.moveDirection.x = Math.cos(angle) * force; this.moveDirection.z = -Math.sin(angle) * force;
+    }).on('end', () => { this.moveDirection.x = 0; this.moveDirection.z = 0; });
+
+    // Botões do HUD que já existem
+    document.getElementById('camera-mode-btn')?.addEventListener('click', () => { this.cameraMode = (this.cameraMode === 'move') ? 'rotate' : 'move'; event.target.textContent = this.cameraMode === 'move' ? '[Mover]' : '[Rotar]'; });
+    document.getElementById('power-overlay-btn')?.addEventListener('click', () => this.togglePowerOverlay());
+    
+    // --- INÍCIO DA CORREÇÃO IMPORTANTE ---
+    // Garante que o 'this' dentro das funções de evento seja sempre o objeto 'Game'
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('mousemove', this.updateCursor.bind(this));
+    canvas.addEventListener('click', this.handleMapClick.bind(this));
+    // --- FIM DA CORREÇÃO IMPORTANTE ---
+
+    window.addEventListener('keydown', (e) => {
+        if (this.buildMode === 'road-curved') {
+            if (e.key === 'Enter') this.finalizeCurvedRoad();
+            else if (e.key === 'Escape') this.cancelCurvedRoad();
+        }
+    });
+},
     updateCursor: function(e) { if (!this.buildCursor.visible) { this.terraformCursor.visible = false; return; } const rect = this.renderer.domElement.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top; this.mouse.x = (x / rect.width) * 2 - 1; this.mouse.y = -(y / rect.height) * 2 + 1; this.raycaster.setFromCamera(this.mouse, this.camera); const intersects = this.raycaster.intersectObject(this.terrainMesh); if (intersects.length > 0) { const pos = intersects[0].point; const gridX = Math.round(pos.x / this.gridSize); const gridZ = Math.round(pos.z / this.gridSize); const snappedX = gridX * this.gridSize; const snappedZ = gridZ * this.gridSize; const terrainHeight = intersects[0].point.y; this.buildCursor.position.set(snappedX, terrainHeight + 0.25, snappedZ); const needsTerraformingCursor = this.buildMode.startsWith('power') || this.buildMode === 'residential' || this.buildMode === 'commercial' || this.buildMode.startsWith('terraform'); this.terraformCursor.visible = needsTerraformingCursor; if (needsTerraformingCursor) { this.terraformCursor.position.set(snappedX, terrainHeight + 0.05, snappedZ); if(this.buildMode === 'terraform-raise') this.terraformCursor.material.color.set(0x00ff00); else if(this.buildMode === 'terraform-lower') this.terraformCursor.material.color.set(0xff0000); else this.terraformCursor.material.color.set(0xdaa520); } const logicalCoords = this.worldToGridCoords(this.buildCursor.position); if (this.buildMode === 'residential' || this.buildMode === 'commercial') { if (logicalCoords && this.logicalGrid[logicalCoords.x] && this.logicalGrid[logicalCoords.x][logicalCoords.z] === 2) this.buildCursor.material.color.set(0x00ff00); else this.buildCursor.material.color.set(0xff0000); } else if (this.buildMode === 'demolish') { this.buildCursor.material.color.set(0xff0000); } else { this.buildCursor.material.color.set(0xffffff); } } },
     handleMapClick: function() { if (!this.buildCursor.visible || this.buildMode === 'select') return; if (this.buildMode === 'demolish') { this.demolishObject(); } else if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) { this.handleLinePlacement(); } else if (this.buildMode.startsWith('terraform')) { this.modifyTerrainOnClick(); } else { this.placeObject(); } },
     handleLinePlacement: function() { const currentPos = this.buildCursor.position.clone(); if (this.buildMode === 'road-curved') { this.currentCurvePoints.push(currentPos); const guideGeo = new THREE.SphereGeometry(1, 8, 8); const guideMat = new THREE.MeshBasicMaterial({ color: 0xffff00 }); const guideMesh = new THREE.Mesh(guideGeo, guideMat); guideMesh.position.copy(currentPos); this.scene.add(guideMesh); this.curveGuideMeshes.push(guideMesh); } else if (this.buildMode === 'road') { if (!this.isDrawing) { this.startPoint = currentPos; this.isDrawing = true; } else { this.createRoadSegment(this.startPoint, currentPos); this.isDrawing = false; this.startPoint = null; } } else if (this.buildMode === 'power-line') { if (!this.isDrawing) { this.startPoint = currentPos; const poleHeight = 12; const poleGeo = new THREE.CylinderGeometry(0.4, 0.6, poleHeight, 8); const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 }); this.temporaryPole = new THREE.Mesh(poleGeo, poleMat); this.temporaryPole.position.copy(this.startPoint).y = this.getTerrainHeight(this.startPoint.x, this.startPoint.z) + poleHeight / 2; this.scene.add(this.temporaryPole); this.isDrawing = true; } else { const endPoint = currentPos; if (this.startPoint.distanceTo(endPoint) > 0) { this.scene.remove(this.temporaryPole); this.createPowerLineObject(this.startPoint, endPoint, this.temporaryPole); } else { this.scene.remove(this.temporaryPole); } this.isDrawing = false; this.startPoint = null; this.temporaryPole = null; } } },
