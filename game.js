@@ -1,9 +1,7 @@
-// game.js - VERSÃO TOTALMENTE CORRIGIDA E FUNCIONAL
+// game.js - VERSÃO COMPLETA, FINAL E GARANTIDA
 
-// ... (O gerador de Ruído Perlin no topo continua o mesmo) ...
 const Noise = { p: new Uint8Array(512), init: function() { const p = []; for (let i = 0; i < 256; i++) p[i] = i; for (let i = 255; i > 0; i--) { const n = Math.floor((i + 1) * Math.random());[p[i], p[n]] = [p[n], p[i]]; } for (let i = 0; i < 256; i++) this.p[i] = this.p[i + 256] = p[i]; }, lerp: (a, b, t) => a + t * (b - a), grad: function(hash, x, y) { const h = hash & 15; const u = h < 8 ? x : y; const v = h < 4 ? y : h === 12 || h === 14 ? x : 0; return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v); }, perlin2: function(x, y) { const X = Math.floor(x) & 255; const Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const fade = t => t * t * t * (t * (t * 6 - 15) + 10); const u = fade(x); const v = fade(y); const p = this.p; const A = p[X] + Y, B = p[X + 1] + Y; return this.lerp(this.lerp(this.grad(p[A], x, y), this.grad(p[B], x - 1, y), u), this.lerp(this.grad(p[A + 1], x, y - 1), this.grad(p[B + 1], x - 1, y - 1), u), v); } };
 Noise.init();
-
 
 const Game = {
     isInitialized: false, buildMode: 'select', cameraMode: 'move',
@@ -20,17 +18,18 @@ const Game = {
 
     init: function() {
         if (this.isInitialized) return;
+        DebugConsole.log("Game.init: Começando inicialização do jogo...");
         this.gridCells = this.gridWorldSize / this.gridSize;
         this.initializeLogicalGrid();
         this.setupScene();
-        // A ordem aqui é importante. Controles e Animação SÓ NO FINAL.
-        this.createInitialHighway(); 
+        this.createInitialHighway();
         this.setupControls();
         this.animate = this.animate.bind(this);
         this.animate(0);
         this.isInitialized = true;
         this.updatePopulationUI();
         this.updatePowerUI();
+        DebugConsole.log("Game.init: Jogo inicializado com sucesso.");
     },
     
     initializeLogicalGrid: function() { this.logicalGrid = Array(this.gridCells).fill(0).map(() => Array(this.gridCells).fill(0)); },
@@ -52,32 +51,32 @@ const Game = {
 
     createPennisulaTerrain: function() { const segments = 128; const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments); const vertices = geometry.attributes.position; const colors = []; const sandColor = new THREE.Color(0xC2B280), grassColor = new THREE.Color(0x55902A), rockColor = new THREE.Color(0x808080), snowColor = new THREE.Color(0xFFFAFA); const center = new THREE.Vector2(0, 0); const maxDist = this.gridWorldSize / 2; const baseHeight = 18.0; const maxAmplitude = 45.0; for (let i = 0; i < vertices.count; i++) { const x = vertices.getX(i); const z = vertices.getY(i); let noise = 0; let frequency = 1.8 / this.gridWorldSize; let amplitude = maxAmplitude; for (let j = 0; j < 4; j++) { noise += Noise.perlin2(x * frequency, z * frequency) * amplitude; frequency *= 2.1; amplitude /= 2.2; } const dist = center.distanceTo(new THREE.Vector2(x, z)); let islandFalloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.2); let continentFalloff = Math.pow(THREE.MathUtils.smoothstep(z, maxDist * 0.5, maxDist), 2); let finalFalloff = THREE.MathUtils.lerp(islandFalloff, 1.0, continentFalloff); const flatAreaFactor = 1.0 - Math.pow(THREE.MathUtils.smoothstep(dist, 70, 150), 2); noise *= flatAreaFactor; let height = (baseHeight + noise) * finalFalloff; if (height < 6) height = 6; vertices.setZ(i, height); if (height < 10) colors.push(sandColor.r, sandColor.g, sandColor.b); else if (height < 30) colors.push(grassColor.r, grassColor.g, grassColor.b); else if (height < 45) colors.push(rockColor.r, rockColor.g, rockColor.b); else colors.push(snowColor.r, snowColor.g, snowColor.b); } geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); geometry.computeVertexNormals(); const material = new THREE.MeshLambertMaterial({ vertexColors: true }); const mesh = new THREE.Mesh(geometry, material); mesh.rotation.x = -Math.PI / 2; return mesh; },
     
-    // CORREÇÃO: Função refeita para garantir que a estrada fique ACIMA do solo
     createInitialHighway: function() {
-        this.terrainMesh.updateMatrixWorld(true); // Força a atualização da matriz do terreno
-        
+        this.terrainMesh.updateMatrixWorld(true);
         const createSingleLane = (x_pos, reversed) => {
-            const halfSize = this.gridWorldSize / 2;
-            const startZ = halfSize - 1; 
-            const endZ = 10;
-            
-            // Pega a altura em vários pontos e usa a mais alta + offset para evitar afundar
-            const h1 = this.getTerrainHeight(x_pos, startZ);
-            const h2 = this.getTerrainHeight(x_pos, (startZ + endZ) / 2);
-            const h3 = this.getTerrainHeight(x_pos, endZ);
+            const halfSize = this.gridWorldSize / 2; const startZ = halfSize - 1; const endZ = 10;
+            const h1 = this.getTerrainHeight(x_pos, startZ); const h2 = this.getTerrainHeight(x_pos, (startZ + endZ) / 2); const h3 = this.getTerrainHeight(x_pos, endZ);
             const roadHeight = Math.max(h1, h2, h3) + 0.3;
-
-            const points = [
-                new THREE.Vector3(x_pos, roadHeight, startZ),
-                new THREE.Vector3(x_pos, roadHeight, endZ)
-            ];
-
-            if (reversed) points.reverse();
-            this.createRoadObject(points);
+            const points = [new THREE.Vector3(x_pos, roadHeight, startZ), new THREE.Vector3(x_pos, roadHeight, endZ)];
+            if (reversed) points.reverse(); this.createRoadObject(points);
         };
-        
-        createSingleLane(15, false); // Via de entrada
-        createSingleLane(-15, true); // Via de saída
+        createSingleLane(15, false); createSingleLane(-15, true);
+    },
+    
+    // ===== A FUNÇÃO QUE ESTÁ DANDO PROBLEMA =====
+    // ELA ESTÁ AQUI, DEFINIDA DENTRO DO OBJETO 'Game'.
+    setBuildMode: function(mode) {
+        if (this.buildMode === 'road-curved' && this.currentCurvePoints.length > 0) {
+            this.cancelCurvedRoad();
+        }
+        this.buildMode = mode;
+        this.buildCursor.visible = (mode !== 'select');
+        this.isDrawing = false;
+        this.startPoint = null;
+        if (this.temporaryPole) {
+            this.scene.remove(this.temporaryPole);
+            this.temporaryPole = null;
+        }
     },
     
     setupControls: function() {
