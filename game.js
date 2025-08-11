@@ -1,10 +1,12 @@
-// game.js
 const Game = {
     isInitialized: false, buildMode: 'select', cameraMode: 'move',
     scene: null, camera: null, renderer: null, mapPlane: null,
     buildCursor: null, raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(),
     joystick: null, moveDirection: { x: 0, z: 0 }, moveSpeed: 0.5, rotateSpeed: 0.02,
     gridSize: 10, isDrawing: false, startPoint: null,
+    
+    // NOVO: Armazena o primeiro poste durante a construção da linha de energia
+    temporaryPole: null, 
 
     // Gerenciamento da cidade e da rede elétrica
     cityObjects: [],
@@ -24,7 +26,7 @@ const Game = {
         this.animate = this.animate.bind(this);
         this.animate();
         this.isInitialized = true;
-        this.updatePowerUI(); // Atualiza a UI de energia no início
+        this.updatePowerUI();
     },
     
     setupScene: function() {
@@ -45,7 +47,7 @@ const Game = {
 
         this.mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshLambertMaterial({ color: 0x55902A }));
         this.mapPlane.rotation.x = -Math.PI / 2;
-        this.mapPlane.userData.isGround = true; // Identifica o chão
+        this.mapPlane.userData.isGround = true;
         this.scene.add(this.mapPlane);
         
         const cursorGeo = new THREE.BoxGeometry(this.gridSize, 1, this.gridSize);
@@ -61,7 +63,13 @@ const Game = {
     setBuildMode: function(mode) {
         this.buildMode = mode;
         this.buildCursor.visible = (mode !== 'select');
-        this.isDrawing = false; this.startPoint = null;
+        this.isDrawing = false; 
+        this.startPoint = null;
+        // Se o usuário trocar de modo, cancela a construção de postes
+        if (this.temporaryPole) {
+            this.scene.remove(this.temporaryPole);
+            this.temporaryPole = null;
+        }
         this.buildCursor.material.color.set(mode === 'demolish' ? 0xff0000 : 0xffffff);
     },
 
@@ -105,99 +113,126 @@ const Game = {
         }
     },
 
+    // ALTERADO: Lógica de construção de linha refeita
     handleLinePlacement: function() {
-        if (!this.isDrawing) {
-            this.startPoint = this.buildCursor.position.clone();
-            this.isDrawing = true;
-        } else {
-            this.createLineSegment(this.startPoint, this.buildCursor.position.clone());
-            this.isDrawing = false; this.startPoint = null;
+        const currentPos = this.buildCursor.position.clone();
+
+        // Lógica específica para POSTES DE ENERGIA (duas etapas)
+        if (this.buildMode.startsWith('power-line')) {
+            if (!this.isDrawing) {
+                // 1º Clique: Cria e posiciona o primeiro poste
+                this.startPoint = currentPos;
+                const poleHeight = 12;
+                const poleGeo = new THREE.CylinderGeometry(0.4, 0.6, poleHeight, 8);
+                const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 });
+                this.temporaryPole = new THREE.Mesh(poleGeo, poleMat);
+                this.temporaryPole.position.copy(this.startPoint);
+                this.temporaryPole.position.y = poleHeight / 2;
+                this.scene.add(this.temporaryPole);
+                this.isDrawing = true;
+            } else {
+                // 2º Clique: Cria o segundo poste e finaliza a linha
+                const endPoint = currentPos;
+                const distance = this.startPoint.distanceTo(endPoint);
+                if (distance > 0) {
+                    // Remove o poste temporário da cena para adicioná-lo ao grupo final
+                    this.scene.remove(this.temporaryPole); 
+                    this.createPowerLineObject(this.startPoint, endPoint, this.temporaryPole);
+                } else {
+                    // Se clicou no mesmo lugar, cancela a operação
+                    this.scene.remove(this.temporaryPole);
+                }
+                this.isDrawing = false;
+                this.startPoint = null;
+                this.temporaryPole = null;
+            }
+        } 
+        // Lógica para ESTRADAS (continua a mesma)
+        else if (this.buildMode.startsWith('road')) {
+            if (!this.isDrawing) {
+                this.startPoint = currentPos;
+                this.isDrawing = true;
+            } else {
+                this.createRoadSegment(this.startPoint, currentPos);
+                this.isDrawing = false;
+                this.startPoint = null;
+            }
         }
     },
+    
+    // NOVO: Função dedicada para criar o objeto completo da linha de energia
+    createPowerLineObject: function(start, end, firstPole) {
+        const path = new THREE.Vector3().subVectors(end, start);
+        const length = path.length();
+        const poleHeight = 12;
 
-    // ... (mantenha todo o código de game.js até aqui) ...
+        const powerLineGroup = new THREE.Group();
+        const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 });
+        const crossarmGeo = new THREE.BoxGeometry(4, 0.4, 0.4);
+        
+        // Adiciona o primeiro poste (já criado) ao grupo
+        powerLineGroup.add(firstPole);
 
-    createLineSegment: function(start, end) {
+        // Cria e adiciona o segundo poste
+        const secondPole = firstPole.clone();
+        secondPole.position.copy(end);
+        secondPole.position.y = poleHeight / 2;
+        powerLineGroup.add(secondPole);
+
+        // Cria as vigas (cruzetas) para ambos os postes
+        const crossarm1 = new THREE.Mesh(crossarmGeo, poleMat);
+        crossarm1.position.copy(start).y = poleHeight - 1.5;
+        crossarm1.rotation.y = Math.atan2(path.x, path.z) + Math.PI / 2;
+        powerLineGroup.add(crossarm1);
+
+        const crossarm2 = crossarm1.clone();
+        crossarm2.position.copy(end).y = poleHeight - 1.5;
+        powerLineGroup.add(crossarm2);
+
+        // Cria o fio
+        const wireGeo = new THREE.BoxGeometry(0.2, 0.2, length);
+        const wireMat = new THREE.MeshLambertMaterial({ color: 0x303030 });
+        const wire = new THREE.Mesh(wireGeo, wireMat);
+        wire.position.copy(start).add(path.clone().multiplyScalar(0.5));
+        wire.position.y = poleHeight - 1.7;
+        wire.lookAt(end);
+        powerLineGroup.add(wire);
+
+        // Define os dados do grupo
+        const objectData = { isPowered: false, type: 'connector', powerRadius: this.gridSize * 2.5, consumption: 0.2 };
+        powerLineGroup.userData = objectData;
+        
+        // A posição do grupo em si fica na origem, pois os filhos estão em coordenadas do mundo
+        powerLineGroup.position.set(0, 0, 0); 
+        
+        this.scene.add(powerLineGroup);
+        this.cityObjects.push(powerLineGroup);
+        this.powerConnectors.push(powerLineGroup);
+        this.updatePowerGrid();
+    },
+    
+    // ALTERADO: Função simplificada para cuidar apenas das estradas
+    createRoadSegment: function(start, end) {
         const path = new THREE.Vector3().subVectors(end, start);
         const length = path.length();
         if(length === 0) return;
 
-        let objectToAdd; // Usaremos uma variável genérica para o objeto a ser adicionado
-        const objectData = { isPowered: false, type: 'connector' };
-
-        if (this.buildMode.startsWith('road')) {
-            const geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
-            const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-            objectToAdd = new THREE.Mesh(geo, mat);
-            objectToAdd.rotation.y = Math.atan2(path.x, path.z); // Alinha a estrada corretamente
-            
-            objectData.powerRadius = this.gridSize * 0.6; 
-            objectData.consumption = 0.1;
-
-        } else if (this.buildMode.startsWith('power-line')) {
-            // Cria um grupo para conter todas as partes da linha de energia
-            const powerLineGroup = new THREE.Group();
-            
-            const poleHeight = 12;
-            const poleGeo = new THREE.CylinderGeometry(0.4, 0.6, poleHeight, 8);
-            const poleMat = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Marrom escuro
-            const crossarmGeo = new THREE.BoxGeometry(4, 0.4, 0.4); // Viga transversal
-            const wireGeo = new THREE.BoxGeometry(0.2, 0.2, length);
-            const wireMat = new THREE.MeshLambertMaterial({ color: 0x303030 });
-
-            // Poste 1 (início)
-            const pole1 = new THREE.Mesh(poleGeo, poleMat);
-            pole1.position.copy(start);
-            pole1.position.y = poleHeight / 2;
-            const crossarm1 = new THREE.Mesh(crossarmGeo, poleMat);
-            crossarm1.position.copy(pole1.position).y = poleHeight - 1.5;
-            crossarm1.rotation.y = Math.atan2(path.x, path.z); // Alinha a cruzeta
-
-            // Poste 2 (fim)
-            const pole2 = new THREE.Mesh(poleGeo, poleMat);
-            pole2.position.copy(end);
-            pole2.position.y = poleHeight / 2;
-            const crossarm2 = new THREE.Mesh(crossarmGeo, poleMat);
-            crossarm2.position.copy(pole2.position).y = poleHeight - 1.5;
-            crossarm2.rotation.y = Math.atan2(path.x, path.z);
-
-            // Fio
-            const wire = new THREE.Mesh(wireGeo, wireMat);
-            wire.position.y = poleHeight - 1.7; // Posição do fio um pouco abaixo da cruzeta
-            wire.lookAt(end); // Aponta o fio para o final
-            
-            // Adiciona todas as partes ao grupo
-            powerLineGroup.add(pole1, crossarm1, pole2, crossarm2, wire);
-            
-            // O fio precisa ser reposicionado depois de adicionado ao grupo
-            // porque o lookAt funciona com coordenadas globais.
-            wire.position.copy(start).add(path.clone().multiplyScalar(0.5));
-            wire.position.y = poleHeight - 1.7;
-
-            objectToAdd = powerLineGroup;
-            objectData.powerRadius = this.gridSize * 2.5; // Raio de energia do poste
-            objectData.consumption = 0.2;
-
-        } else {
-            console.error("createLineSegment foi chamada com um modo inválido:", this.buildMode);
-            return; 
-        }
+        const geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const mesh = new THREE.Mesh(geo, mat);
         
-        // Define a posição central do objeto para cálculos de distância
-        objectToAdd.position.copy(start).add(path.multiplyScalar(0.5));
-        objectToAdd.userData = objectData;
+        mesh.position.copy(start).add(path.multiplyScalar(0.5));
+        mesh.rotation.y = Math.atan2(path.x, path.z);
         
-        this.scene.add(objectToAdd);
-        this.cityObjects.push(objectToAdd);
-        if (objectData.type === 'connector') {
-            this.powerConnectors.push(objectToAdd);
-        }
+        mesh.userData = { isPowered: false, type: 'connector', powerRadius: this.gridSize * 0.6, consumption: 0.1 };
         
+        this.scene.add(mesh);
+        this.cityObjects.push(mesh);
+        this.powerConnectors.push(mesh);
         this.updatePowerGrid();
     },
-    
+
     placeObject: function() {
-        // (Esta função não precisa de alterações)
         if (!this.buildCursor.visible || this.buildMode === 'select') return;
         let newObject, height = 0;
         let objectData = { isPowered: false, originalColor: 0xffffff };
@@ -239,10 +274,8 @@ const Game = {
     },
 
     demolishObject: function() {
-        // ATENÇÃO: A chamada do raycaster foi alterada para `true` para buscar dentro de grupos
         const intersects = this.raycaster.intersectObjects(this.cityObjects, true);
         if (intersects.length > 0) {
-            // Pega o objeto pai (o grupo, no caso de linhas de energia)
             let objectToDemolish = intersects[0].object;
             while (objectToDemolish.parent && objectToDemolish.parent !== this.scene) {
                  objectToDemolish = objectToDemolish.parent;
@@ -254,10 +287,11 @@ const Game = {
             this.powerConnectors = this.powerConnectors.filter(o => o.uuid !== objectToDemolish.uuid);
             
             this.scene.remove(objectToDemolish);
-            // Limpa a memória dos filhos do grupo também
             objectToDemolish.traverse(child => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                }
             });
 
             this.updatePowerGrid();
@@ -267,13 +301,11 @@ const Game = {
     updatePowerGrid: function() {
         const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
         
-        // 1. Resetar todos
-        this.powerOverlay.clear(); // Limpa a visualização da rede
+        this.powerOverlay.clear();
         allPowerObjects.forEach(obj => { obj.userData.isPowered = false; });
         this.powerAvailable = 0;
         this.powerNeeded = 0;
 
-        // 2. Energizar a partir das usinas
         const poweredQueue = [];
         this.powerProducers.forEach(producer => {
             this.powerAvailable += producer.userData.production;
@@ -281,7 +313,6 @@ const Game = {
             poweredQueue.push(producer);
         });
 
-        // 3. Propagar energia pela rede
         let head = 0;
         while(head < poweredQueue.length) {
             const currentPowered = poweredQueue[head++];
@@ -289,7 +320,12 @@ const Game = {
 
             allPowerObjects.forEach(otherObj => {
                 if (!otherObj.userData.isPowered) {
-                    const distance = currentPowered.position.distanceTo(otherObj.position);
+                    // A posição de grupos agora é a média entre início e fim para cálculo de propagação
+                    const otherPos = otherObj.userData.type === 'connector' && otherObj.isGroup ? 
+                        otherObj.children[0].position.clone().add(otherObj.children[1].position).multiplyScalar(0.5) : 
+                        otherObj.position;
+                    
+                    const distance = currentPowered.position.distanceTo(otherPos);
                     if (distance < radius) {
                         otherObj.userData.isPowered = true;
                         poweredQueue.push(otherObj);
@@ -298,26 +334,28 @@ const Game = {
             });
         }
         
-        // NOVO: 3.5. Desenha o raio de energia de TODOS os objetos energizados que têm um
         poweredQueue.forEach(poweredObj => {
             if (poweredObj.userData.powerRadius) {
                 const radius = poweredObj.userData.powerRadius;
                 const circleGeo = new THREE.CircleGeometry(radius, 32);
                 const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
                 const circleMesh = new THREE.Mesh(circleGeo, circleMat);
-                circleMesh.position.copy(poweredObj.position);
+                // A posição do círculo de overlay para grupos também precisa ser calculada
+                const objPosition = poweredObj.userData.type === 'connector' && poweredObj.isGroup ? 
+                        poweredObj.children[0].position.clone().add(poweredObj.children[1].position).multiplyScalar(0.5) : 
+                        poweredObj.position;
+
+                circleMesh.position.copy(objPosition);
                 circleMesh.position.y = 0.1;
                 circleMesh.rotation.x = -Math.PI / 2;
                 this.powerOverlay.add(circleMesh);
             }
         });
         
-        // 4. Calcular o consumo
         this.powerConsumers.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
         this.powerConnectors.forEach(c => { if (c.userData.isPowered) this.powerNeeded += c.userData.consumption; });
         const hasEnoughPower = this.powerAvailable >= this.powerNeeded;
 
-        // 5. Atualizar as cores
         this.powerConsumers.forEach(c => {
             const shouldBePowered = c.userData.isPowered && hasEnoughPower;
             c.material.color.set(shouldBePowered ? c.userData.originalColor : 0x808080);
@@ -327,8 +365,6 @@ const Game = {
         this.updatePowerUI();
     },
 
-// ... (o resto do arquivo, de updatePowerUI em diante, pode continuar igual)
-
     updatePowerUI: function() {
         UI.updatePowerInfo(this.powerAvailable, this.powerNeeded);
     },
@@ -336,15 +372,15 @@ const Game = {
     toggleNoPowerIcon: function(building, show) {
         let icon = building.getObjectByName("noPowerIcon");
         if (show && !icon) {
-            // Reutiliza uma única textura para todos os ícones para economizar memória
             if (!this.noPowerTexture) {
-                this.noPowerTexture = new THREE.TextureLoader().load('https://i.imgur.com/Y32mG2S.png');
+                // ALTERADO: Carrega a imagem da pasta local 'assets'
+                this.noPowerTexture = new THREE.TextureLoader().load('assets/no_power_icon.png');
             }
             const material = new THREE.SpriteMaterial({ map: this.noPowerTexture, color: 0xffdd00 });
             icon = new THREE.Sprite(material);
             icon.name = "noPowerIcon";
             icon.scale.set(8, 8, 8);
-            icon.position.y = building.geometry.parameters.height + 5; // Posição acima do prédio
+            icon.position.y = building.geometry.parameters.height + 5;
             building.add(icon);
         } else if (!show && icon) {
             building.remove(icon);
