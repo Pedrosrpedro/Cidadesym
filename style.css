@@ -55,3 +55,49 @@ body { background-image: url('assets/background.jpg'); background-size: cover; b
     color: #ff4757;
     border-color: #ff4757;
 }
+
+/* style.css */
+
+/* --- Estilos da Tela de Carregamento --- */
+#loading-screen {
+    position: fixed; /* Cobre a tela inteira, não importa a rolagem */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #1a252f; /* Um fundo escuro */
+    z-index: 9999; /* Garante que fique em cima de tudo */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    color: #e0f7fa;
+    font-family: 'Poppins', sans-serif;
+    transition: opacity 0.5s ease; /* Transição suave para desaparecer */
+}
+
+#loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none; /* Impede cliques na tela quando estiver invisível */
+}
+
+#loading-screen h1 {
+    font-size: 2.5em;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+.spinner {
+    border: 8px solid rgba(0, 0, 0, 0.1);
+    border-left-color: #00ffff; /* Cor ciano do spinner */
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite; /* Animação de rotação */
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
