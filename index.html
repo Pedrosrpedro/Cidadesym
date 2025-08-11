@@ -38,7 +38,7 @@
 
     <!-- Barra de Ferramentas Inferior -->
     <div id="bottom-bar" class="hidden">
-        <!-- PAINÉIS DE SUBMENU (ficam acima da barra principal) -->
+        <!-- PAINÉIS DE SUBMENU -->
         <div id="panel-zones" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="residential">Residencial</button>
             <button class="ui-button" data-build-mode="commercial">Comercial</button>
@@ -46,36 +46,30 @@
         <div id="panel-power" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="power-wind">Eólica</button>
             <button class="ui-button" data-build-mode="power-coal">Carvão</button>
+            <button class="ui-button" data-build-mode="power-line">Postes</button>
         </div>
          <div id="panel-transport" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="road">Estrada Reta</button>
             <button class="ui-button" data-build-mode="road-curved">Estrada Curva</button>
-            <button class="ui-button" data-build-mode="power-line">Postes</button>
         </div>
-        <!-- NOVO PAINEL DE TERRAFORMAR -->
+        <div id="panel-water" class="submenu-panel hidden">
+            <button class="ui-button" data-build-mode="water-pump">Bomba d'Água</button>
+            <button class="ui-button" data-build-mode="sewage-plant">Trat. Esgoto</button>
+            <button class="ui-button" data-build-mode="pipe">Encanamento</button>
+        </div>
         <div id="panel-terrain" class="submenu-panel hidden">
             <button class="ui-button" data-build-mode="terraform-raise">Elevar Terreno</button>
             <button class="ui-button" data-build-mode="terraform-lower">Abaixar Terreno</button>
         </div>
 
-<!-- Cole este novo painel junto com os outros painéis de submenu -->
-<div id="panel-water" class="submenu-panel hidden">
-    <button class="ui-button" data-build-mode="water-pump">Bomba d'Água</button>
-    <button class="ui-button" data-build-mode="sewage-plant">Trat. Esgoto</button>
-    <button class="ui-button" data-build-mode="pipe">Encanamento</button>
-</div>
-
-<!-- Na barra principal, adicione o botão que abre o painel de água -->
-<!-- <div id="main-toolbar"> -->
-<button class.ui-button main-tool-btn" data-panel="panel-water">Água</button>
-        
         <!-- BARRA PRINCIPAL -->
         <div id="main-toolbar">
             <button id="btn-select" class="ui-button">Selecionar</button>
             <button class="ui-button main-tool-btn" data-panel="panel-zones">Zonas</button>
             <button class="ui-button main-tool-btn" data-panel="panel-power">Energia</button>
             <button class="ui-button main-tool-btn" data-panel="panel-transport">Transporte</button>
-            <!-- NOVO BOTÃO PRINCIPAL DE TERRAFORMAR -->
+            <!-- CORREÇÃO DO BOTÃO DE ÁGUA -->
+            <button class="ui-button main-tool-btn" data-panel="panel-water">Água</button>
             <button class="ui-button main-tool-btn" data-panel="panel-terrain">Terraformar</button>
             <button id="btn-demolish" class="ui-button">Demolir</button>
         </div>
@@ -91,14 +85,16 @@
     <button id="debug-toggle-btn">Console</button>
 
         <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     
-    <!-- Seus scripts -->
+    <!-- Seus scripts - ORDEM CORRIGIDA -->
     <script src="console.js" defer></script>
+    <!-- game.js DEVE vir ANTES de ui.js e main.js -->
+    <script src="game.js" defer></script> 
     <script src="ui.js" defer></script>
-    <script src="game.js" defer></script>
     <script src="menu.js" defer></script>
     <script src="main.js" defer></script>
-</body>
+
+    </body>
 </html>
