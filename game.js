@@ -138,6 +138,7 @@ const Game = {
         this.scene.add(this.powerOverlay);
     },
 
+    // CORREÇÃO: Lógica de geração de terreno refeita para mais naturalidade.
     createIslandTerrain: function() {
         const segments = 128;
         const geometry = new THREE.PlaneGeometry(this.gridWorldSize, this.gridWorldSize, segments, segments);
@@ -147,40 +148,47 @@ const Game = {
         const sandColor = new THREE.Color(0xC2B280);
         const grassColor = new THREE.Color(0x55902A);
         const rockColor = new THREE.Color(0x808080);
+        const snowColor = new THREE.Color(0xFFFAFA);
         
         const center = new THREE.Vector2(0, 0);
         const maxDist = this.gridWorldSize / 2;
-        const baseHeight = 8.0;
         
+        // Parâmetros ajustados para um relevo mais interessante
+        const baseHeight = 15.0; 
+        const maxAmplitude = 60.0;
+
         for (let i = 0; i < vertices.count; i++) {
             const x = vertices.getX(i);
             const z = vertices.getY(i);
             
             let noise = 0;
-            let frequency = 2.5 / this.gridWorldSize;
-            // CORREÇÃO: Amplitude aumentada para maior variação de relevo.
-            let amplitude = 35;
+            let frequency = 2.0 / this.gridWorldSize;
+            let amplitude = maxAmplitude;
+            // 4 oitavas de ruído para mais detalhes
             for (let j = 0; j < 4; j++) {
                 noise += Noise.perlin2(x * frequency, z * frequency) * amplitude;
-                frequency *= 2;
-                amplitude /= 2;
+                frequency *= 2.2; 
+                amplitude /= 2.0;
             }
 
             const dist = center.distanceTo(new THREE.Vector2(x, z));
-            // CORREÇÃO: Expoente do falloff ajustado para uma transição mais suave.
-            const falloff = Math.pow(1.0 - (dist / maxDist), 1.8);
-            let height = baseHeight + (noise * falloff);
-            height = Math.max(height, 0);
+            // Nova função de falloff que faz a ilha descer até y=0 nas bordas.
+            const falloff = Math.pow(1.0 - THREE.MathUtils.smoothstep(dist, maxDist * 0.7, maxDist), 1.5);
+
+            // A altura é o resultado do ruído, multiplicado pelo falloff para criar a forma da ilha.
+            let height = (baseHeight + noise) * falloff;
             
             vertices.setZ(i, height);
 
-            // CORREÇÃO: Limites de cor ajustados para a nova faixa de altura.
-            if (height < baseHeight + 3.0) { 
-                colors.push(sandColor.r, sandColor.g, sandColor.b);
-            } else if (height > baseHeight + 30) {
-                 colors.push(rockColor.r, rockColor.g, rockColor.b);
+            // Novas faixas de cor para um visual mais rico
+            if (height < 6) {
+                colors.push(sandColor.r, sandColor.g, sandColor.b); // Praia
+            } else if (height < 35) {
+                colors.push(grassColor.r, grassColor.g, grassColor.b); // Grama
+            } else if (height < 50) {
+                 colors.push(rockColor.r, rockColor.g, rockColor.b); // Rocha
             } else {
-                colors.push(grassColor.r, grassColor.g, grassColor.b);
+                 colors.push(snowColor.r, snowColor.g, snowColor.b); // Neve
             }
         }
         
@@ -222,7 +230,8 @@ const Game = {
         document.getElementById('power-overlay-btn')?.addEventListener('click', () => this.togglePowerOverlay());
         
         const canvas = this.renderer.domElement;
-        canvas.addEventListener('mousemove', (e) => this.updateCursor(e.clientX, e.clientY));
+        // Passa o evento 'e' para a função updateCursor
+        canvas.addEventListener('mousemove', (e) => this.updateCursor(e));
         canvas.addEventListener('click', () => this.handleMapClick());
         
         window.addEventListener('keydown', (e) => {
@@ -233,12 +242,23 @@ const Game = {
         });
     },
 
-    updateCursor: function(x, y) {
+    // CORREÇÃO: Leitura do mouse refeita para ser precisa.
+    updateCursor: function(e) {
         if (!this.buildCursor.visible) {
             this.terraformCursor.visible = false;
             return;
         }
-        this.mouse.x = (x / window.innerWidth) * 2 - 1; this.mouse.y = -(y / window.innerHeight) * 2 + 1;
+
+        // Pega a posição e tamanho do canvas na tela
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        // Calcula a posição do mouse relativa ao canvas
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Normaliza as coordenadas do mouse para o espaço do Three.js (-1 a +1)
+        this.mouse.x = (x / rect.width) * 2 - 1;
+        this.mouse.y = -(y / rect.height) * 2 + 1;
+        
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const intersects = this.raycaster.intersectObject(this.terrainMesh);
         
@@ -246,19 +266,27 @@ const Game = {
             const pos = intersects[0].point;
             const gridX = Math.round(pos.x / this.gridSize);
             const gridZ = Math.round(pos.z / this.gridSize);
-            const terrainHeight = this.getTerrainHeight(gridX * this.gridSize, gridZ * this.gridSize);
+            const snappedX = gridX * this.gridSize;
+            const snappedZ = gridZ * this.gridSize;
             
-            this.buildCursor.position.set(gridX * this.gridSize, terrainHeight + 0.25, gridZ * this.gridSize);
+            // Usamos a altura real do ponto de intersecção para maior precisão
+            const terrainHeight = intersects[0].point.y; 
             
-            const needsTerraforming = this.buildMode.startsWith('power') || this.buildMode === 'residential' || this.buildMode === 'commercial' || this.buildMode.startsWith('terraform');
-            this.terraformCursor.visible = needsTerraforming;
-            if (needsTerraforming) {
-                this.terraformCursor.position.set(this.buildCursor.position.x, terrainHeight + 0.05, this.buildCursor.position.z);
+            this.buildCursor.position.set(snappedX, terrainHeight + 0.25, snappedZ);
+            
+            const needsTerraformingCursor = this.buildMode.startsWith('power') || this.buildMode === 'residential' || this.buildMode === 'commercial' || this.buildMode.startsWith('terraform');
+            this.terraformCursor.visible = needsTerraformingCursor;
+            if (needsTerraformingCursor) {
+                this.terraformCursor.position.set(snappedX, terrainHeight + 0.05, snappedZ);
+                 // Muda a cor do cursor de terraformagem para indicar a ação
+                if(this.buildMode === 'terraform-raise') this.terraformCursor.material.color.set(0x00ff00);
+                else if(this.buildMode === 'terraform-lower') this.terraformCursor.material.color.set(0xff0000);
+                else this.terraformCursor.material.color.set(0xdaa520);
             }
             
             if (this.buildMode === 'residential' || this.buildMode === 'commercial') {
                 const logicalCoords = this.worldToGridCoords(this.buildCursor.position);
-                if (logicalCoords && this.logicalGrid[logicalCoords.x][logicalCoords.z] === 2) {
+                if (logicalCoords && this.logicalGrid[logicalCoords.x] && this.logicalGrid[logicalCoords.x][logicalCoords.z] === 2) {
                     this.buildCursor.material.color.set(0x00ff00);
                 } else {
                     this.buildCursor.material.color.set(0xff0000);
@@ -276,20 +304,19 @@ const Game = {
             this.demolishObject();
         } else if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) {
             this.handleLinePlacement();
-        } else if (this.buildMode.startsWith('terraform')) { // NOVO: Captura o clique para terraformar
+        } else if (this.buildMode.startsWith('terraform')) {
             this.modifyTerrainOnClick();
         } else {
             this.placeObject();
         }
     },
 
-    // NOVO: Função para modificar o terreno com o clique do mouse.
     modifyTerrainOnClick: function() {
         if (!this.buildCursor.visible) return;
 
         const center = this.buildCursor.position;
         const brushSize = this.gridSize * 1.5;
-        const brushStrength = 0.5; // Quão forte é o efeito a cada clique
+        const brushStrength = 0.5;
 
         const terrainGeo = this.terrainMesh.geometry;
         const vertices = terrainGeo.attributes.position;
@@ -299,7 +326,6 @@ const Game = {
             const dist = vPos.distanceTo(new THREE.Vector3(center.x, 0, center.z));
 
             if (dist < brushSize) {
-                // Efeito de suavização (falloff) - mais forte no centro do pincel
                 const falloff = Math.cos((dist / brushSize) * (Math.PI / 2));
                 const amount = brushStrength * falloff;
                 
@@ -313,11 +339,9 @@ const Game = {
         }
         vertices.needsUpdate = true;
         terrainGeo.computeVertexNormals();
-        // Atualiza as cores do terreno após a modificação
         this.updateTerrainColors();
     },
 
-    // NOVO: Função para recalcular as cores do terreno (útil após terraformagem).
     updateTerrainColors: function() {
         const terrainGeo = this.terrainMesh.geometry;
         const vertices = terrainGeo.attributes.position;
@@ -325,16 +349,18 @@ const Game = {
         const sandColor = new THREE.Color(0xC2B280);
         const grassColor = new THREE.Color(0x55902A);
         const rockColor = new THREE.Color(0x808080);
-        const baseHeight = 8.0;
+        const snowColor = new THREE.Color(0xFFFAFA);
 
         for(let i = 0; i < vertices.count; i++) {
             const height = vertices.getZ(i);
-            if (height < baseHeight + 3.0) {
+            if (height < 6) {
                 colors.push(sandColor.r, sandColor.g, sandColor.b);
-            } else if (height > baseHeight + 30) {
+            } else if (height < 35) {
+                colors.push(grassColor.r, grassColor.g, grassColor.b);
+            } else if (height < 50) {
                  colors.push(rockColor.r, rockColor.g, rockColor.b);
             } else {
-                colors.push(grassColor.r, grassColor.g, grassColor.b);
+                 colors.push(snowColor.r, snowColor.g, snowColor.b);
             }
         }
         terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -342,6 +368,7 @@ const Game = {
     },
 
     handleLinePlacement: function() {
+        // Usa a posição exata do cursor, que agora está correta.
         const currentPos = this.buildCursor.position.clone();
         if (this.buildMode === 'road-curved') {
             this.currentCurvePoints.push(currentPos);
@@ -384,18 +411,21 @@ const Game = {
             }
         } 
     },
-
+    
+    // As funções abaixo (createRoadObject, etc.) não precisam de grandes mudanças,
+    // pois o erro estava na entrada (posição do clique) e não na sua lógica interna.
+    // O restante do seu código pode permanecer como estava na versão anterior.
+    
     cancelCurvedRoad: function() {
         this.curveGuideMeshes.forEach(mesh => this.scene.remove(mesh));
         this.curveGuideMeshes = [];
         this.currentCurvePoints = [];
     },
     
-    // CORREÇÃO: Lógica de criação de estrada refeita com ExtrudeGeometry.
     createRoadObject: function(points) {
         const pointsWithTerrainHeight = points.map(p => {
             const point = p.clone();
-            point.y = this.getTerrainHeight(p.x, p.z) + 0.1; // Um pequeno offset para evitar z-fighting
+            point.y = this.getTerrainHeight(p.x, p.z) + 0.1;
             return point;
         });
 
@@ -403,7 +433,6 @@ const Game = {
         const roadWidth = this.gridSize * 0.8;
         const tubularSegments = Math.max(64, Math.floor(curve.getLength() * 2));
 
-        // Cria uma forma 2D (uma linha) que será "esticada" ao longo da curva.
         const roadShape = new THREE.Shape([
             new THREE.Vector2(-roadWidth / 2, 0),
             new THREE.Vector2(roadWidth / 2, 0)
@@ -421,7 +450,7 @@ const Game = {
         
         mesh.userData = { 
             type: 'road-unified', 
-            points: curve.getPoints(tubularSegments) // Salva os pontos da curva para terraplanagem
+            points: curve.getPoints(tubularSegments)
         };
         
         this.terraformArea(mesh);
@@ -446,7 +475,7 @@ const Game = {
         const position = this.buildCursor.position.clone();
         if (this.buildMode === 'residential' || this.buildMode === 'commercial') {
             const logicalCoords = this.worldToGridCoords(position);
-            if (!logicalCoords || this.logicalGrid[logicalCoords.x][logicalCoords.z] !== 2) { return; }
+            if (!logicalCoords || !this.logicalGrid[logicalCoords.x] || this.logicalGrid[logicalCoords.x][logicalCoords.z] !== 2) { return; }
         }
         
         const objectSize = (this.buildMode === 'power-coal') ? this.gridSize * 2 : this.gridSize;
@@ -483,8 +512,7 @@ const Game = {
         this.cityObjects.push(newObject);
         this.updatePowerGrid();
     },
-
-    // CORREÇÃO: Lógica de terraplanagem ajustada para evitar crashes.
+    
     terraformArea: function(pathObject, buildingPoints = null, areaSize = this.gridSize) {
         const terrainGeo = this.terrainMesh.geometry;
         const vertices = terrainGeo.attributes.position;
@@ -502,7 +530,6 @@ const Game = {
             needsColorUpdate = true;
 
         } else if (buildingPoints) {
-            // Lógica para aplainar área para edifícios.
             const centerPoint = buildingPoints[0];
             let totalHeight = 0;
             let count = 0;
@@ -522,6 +549,7 @@ const Game = {
             needsColorUpdate = true;
             vertices.needsUpdate = true;
             terrainGeo.computeVertexNormals();
+            if (needsColorUpdate) { this.updateTerrainColors(); }
             return averageHeight;
         }
 
@@ -545,13 +573,11 @@ const Game = {
                 const currentHeight = vertices.getZ(i);
                 let finalHeight = newHeight;
                 
-                // Se for estrada (threshold >= 0), aplica a lógica de deformar/terraplanar.
                 if (threshold >= 0) {
                     const heightDifference = Math.abs(currentHeight - newHeight);
                     if (heightDifference < threshold) {
-                        continue; // Deixa o terreno como está se a deformação for pequena.
+                        continue;
                     }
-                    // CORREÇÃO: Uso correto de smoothstep.
                     const falloff = 1.0 - THREE.MathUtils.smoothstep(dist, 0, halfSize);
                     finalHeight = THREE.MathUtils.lerp(currentHeight, newHeight, falloff);
                 }
@@ -567,10 +593,6 @@ const Game = {
         const intersects = this.raycaster.intersectObject(this.terrainMesh);
         return intersects.length > 0 ? intersects[0].point.y : 0;
     },
-    
-    // ... (o resto do seu código a partir daqui pode continuar o mesmo)
-    // As funções demolishObject, removeObject, checkForAndProcessIntersections, etc.,
-    // devem funcionar bem com as novas estradas e terreno.
     
     demolishObject: function() {
         const intersects = this.raycaster.intersectObjects(this.cityObjects, true);
@@ -604,7 +626,7 @@ const Game = {
         this.powerConsumers = this.powerConsumers.filter(o => o.uuid !== object.uuid);
         this.powerConnectors = this.powerConnectors.filter(o => o.uuid !== object.uuid);
         
-        this.scene.remove(object);
+        if(object.parent) object.parent.remove(object);
         object.traverse(child => {
             if (child.isMesh) {
                 if (child.geometry) child.geometry.dispose();
@@ -724,6 +746,7 @@ const Game = {
     },
 
     worldToGridCoords: function(worldPos) {
+        if (!worldPos) return null;
         const gridX = Math.floor(worldPos.x / this.gridSize) + (this.gridCells / 2);
         const gridZ = Math.floor(worldPos.z / this.gridSize) + (this.gridCells / 2);
         if (gridX >= 0 && gridX < this.gridCells && gridZ >= 0 && gridZ < this.gridCells) {
@@ -735,13 +758,17 @@ const Game = {
     markGridCellsAroundPoint: function(point) {
         const coords = this.worldToGridCoords(point);
         if (coords) {
+            if(!this.logicalGrid[coords.x]) this.logicalGrid[coords.x] = [];
             this.logicalGrid[coords.x][coords.z] = 1;
             const neighbors = [{x:0,z:1}, {x:0,z:-1}, {x:1,z:0}, {x:-1,z:0}];
             neighbors.forEach(n => {
                 const nx = coords.x + n.x;
                 const nz = coords.z + n.z;
-                if(nx >= 0 && nx < this.gridCells && nz >= 0 && nz < this.gridCells && this.logicalGrid[nx][nz] === 0) {
-                    this.logicalGrid[nx][nz] = 2;
+                if(nx >= 0 && nx < this.gridCells && nz >= 0 && nz < this.gridCells) {
+                    if(!this.logicalGrid[nx]) this.logicalGrid[nx] = [];
+                    if (this.logicalGrid[nx][nz] === 0) {
+                        this.logicalGrid[nx][nz] = 2;
+                    }
                 }
             });
         }
