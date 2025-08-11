@@ -5,27 +5,21 @@ const Game = {
     buildCursor: null, raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(),
     joystick: null, moveDirection: { x: 0, z: 0 }, moveSpeed: 0.5, rotateSpeed: 0.02,
     gridSize: 10, isDrawing: false, startPoint: null,
-    cityObjects: [], powerProducers: [], powerConsumers: [], powerLines: [],
+
+    // Gerenciamento da cidade e da rede elétrica
+    cityObjects: [],
+    powerProducers: [],
+    powerConsumers: [],
+    powerConnectors: [], // Postes e Estradas
     powerOverlay: null,
     
     init: function() {
         if (this.isInitialized) return;
-        DebugConsole.log("Game.init: Iniciando...");
-        if (typeof THREE === 'undefined') { DebugConsole.error("Game.init: Three.js NÃO carregado!"); return; }
-        DebugConsole.log("Game.init: Three.js OK.");
-        if (typeof nipplejs === 'undefined') { DebugConsole.error("Game.init: NippleJS NÃO carregado!"); return; }
-        DebugConsole.log("Game.init: NippleJS OK.");
-
-        try {
-            this.setupScene();
-            this.setupControls();
-            this.animate = this.animate.bind(this);
-            this.animate();
-            this.isInitialized = true;
-            DebugConsole.log("Game.init: JOGO INICIADO COM SUCESSO!");
-        } catch (err) {
-            DebugConsole.error("Game.init: ERRO CRÍTICO: " + err.stack);
-        }
+        this.setupScene();
+        this.setupControls();
+        this.animate = this.animate.bind(this);
+        this.animate();
+        this.isInitialized = true;
     },
     
     setupScene: function() {
@@ -45,10 +39,12 @@ const Game = {
         dirLight.position.set(50, 100, 25); this.scene.add(dirLight);
 
         this.mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshLambertMaterial({ color: 0x55902A }));
-        this.mapPlane.rotation.x = -Math.PI / 2; this.scene.add(this.mapPlane);
+        this.mapPlane.rotation.x = -Math.PI / 2;
+        this.mapPlane.userData.isGround = true; // Identifica o chão
+        this.scene.add(this.mapPlane);
         
         const cursorGeo = new THREE.BoxGeometry(this.gridSize, 1, this.gridSize);
-        const cursorMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, wireframe: true });
         this.buildCursor = new THREE.Mesh(cursorGeo, cursorMat);
         this.buildCursor.visible = false; this.scene.add(this.buildCursor);
 
@@ -61,6 +57,7 @@ const Game = {
         this.buildMode = mode;
         this.buildCursor.visible = (mode !== 'select');
         this.isDrawing = false; this.startPoint = null;
+        this.buildCursor.material.color.set(mode === 'demolish' ? 0xff0000 : 0xffffff); // Cursor vermelho para demolir
     },
 
     setupControls: function() {
@@ -94,7 +91,9 @@ const Game = {
     },
     
     handleMapClick: function() {
-        if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) {
+        if (this.buildMode === 'demolish') {
+            this.demolishObject();
+        } else if (this.buildMode.startsWith('road') || this.buildMode.startsWith('power-line')) {
             this.handleLinePlacement();
         } else {
             this.placeObject();
@@ -116,51 +115,55 @@ const Game = {
         const length = path.length();
         if(length === 0) return;
 
-        let geo, mat;
+        let geo, mat, objectData = { isPowered: false };
         if (this.buildMode.startsWith('road')) {
             geo = new THREE.BoxGeometry(this.gridSize * 0.8, 0.2, length);
             mat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-        } else {
+            objectData.type = 'connector'; this.powerConnectors.push(mesh);
+        } else { // power-line
             geo = new THREE.CylinderGeometry(0.5, 0.5, length, 6);
             mat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            objectData.type = 'connector'; objectData.powerRadius = 15; this.powerConnectors.push(mesh);
         }
         
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.copy(start).add(path.multiplyScalar(0.5));
         mesh.lookAt(end);
+        mesh.userData = objectData;
         
         this.scene.add(mesh);
         this.cityObjects.push(mesh);
-        if (this.buildMode === 'power-line') this.powerLines.push(mesh);
-        
         this.updatePowerGrid();
     },
     
     placeObject: function() {
         if (!this.buildCursor.visible || this.buildMode === 'select') return;
-        let newObject, height = 0, objectData = { isPowered: false };
+        let newObject, height = 0;
+        let objectData = { isPowered: false, originalColor: 0xffffff };
         const position = this.buildCursor.position.clone();
         
         switch (this.buildMode) {
             case 'residential':
                 height = this.gridSize;
-                newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: 0x34A853 }));
-                objectData.type = 'consumer'; this.powerConsumers.push(newObject);
+                objectData.originalColor = 0x34A853;
+                newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: objectData.originalColor }));
+                objectData.type = 'consumer'; objectData.powerRadius = 15; this.powerConsumers.push(newObject);
                 break;
             case 'commercial':
                 height = this.gridSize * 1.5;
-                newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: 0x4285F4 }));
-                objectData.type = 'consumer'; this.powerConsumers.push(newObject);
+                objectData.originalColor = 0x4285F4;
+                newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize, height, this.gridSize), new THREE.MeshLambertMaterial({ color: objectData.originalColor }));
+                objectData.type = 'consumer'; objectData.powerRadius = 15; this.powerConsumers.push(newObject);
                 break;
             case 'power-wind':
                 height = this.gridSize * 2.5;
                 newObject = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, height, 8), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
-                objectData.type = 'producer'; objectData.powerRadius = 40; this.powerProducers.push(newObject);
+                objectData.type = 'producer'; objectData.powerRadius = 50; this.powerProducers.push(newObject);
                 break;
             case 'power-coal':
                 height = this.gridSize * 1.2;
                 newObject = new THREE.Mesh(new THREE.BoxGeometry(this.gridSize*2, height, this.gridSize*1.5), new THREE.MeshLambertMaterial({ color: 0x555555 }));
-                objectData.type = 'producer'; objectData.powerRadius = 75; this.powerProducers.push(newObject);
+                objectData.type = 'producer'; objectData.powerRadius = 80; this.powerProducers.push(newObject);
                 break;
             default: return;
         }
@@ -174,12 +177,39 @@ const Game = {
         this.updatePowerGrid();
     },
 
+    demolishObject: function() {
+        const intersects = this.raycaster.intersectObjects(this.cityObjects);
+        if (intersects.length > 0) {
+            const objectToDemolish = intersects[0].object;
+            
+            // Remove dos arrays de gerenciamento
+            this.cityObjects = this.cityObjects.filter(o => o !== objectToDemolish);
+            this.powerProducers = this.powerProducers.filter(o => o !== objectToDemolish);
+            this.powerConsumers = this.powerConsumers.filter(o => o !== objectToDemolish);
+            this.powerConnectors = this.powerConnectors.filter(o => o !== objectToDemolish);
+            
+            // Remove da cena 3D e libera memória
+            this.scene.remove(objectToDemolish);
+            objectToDemolish.geometry.dispose();
+            objectToDemolish.material.dispose();
+
+            this.updatePowerGrid();
+        }
+    },
+
     updatePowerGrid: function() {
-        this.powerConsumers.forEach(c => { c.userData.isPowered = false; c.material.color.set(0x808080); });
-        this.powerLines.forEach(l => { l.userData.isPowered = false; });
-        this.powerOverlay.clear();
+        const allPowerObjects = [...this.powerProducers, ...this.powerConsumers, ...this.powerConnectors];
         
+        // 1. Resetar todos
+        allPowerObjects.forEach(obj => { obj.userData.isPowered = false; });
+        this.powerOverlay.clear();
+
+        // 2. Energizar a partir das usinas (os pontos de partida)
+        const poweredQueue = [];
         this.powerProducers.forEach(producer => {
+            producer.userData.isPowered = true;
+            poweredQueue.push(producer);
+
             const radius = producer.userData.powerRadius;
             const circleGeo = new THREE.CircleGeometry(radius, 32);
             const circleMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.2 });
@@ -188,21 +218,29 @@ const Game = {
             circleMesh.position.y = 0.1;
             circleMesh.rotation.x = -Math.PI / 2;
             this.powerOverlay.add(circleMesh);
+        });
 
-            [...this.powerConsumers, ...this.powerLines].forEach(obj => {
-                if (obj.position.distanceTo(producer.position) < radius) {
-                    obj.userData.isPowered = true;
+        // 3. Propagar energia pela rede (algoritmo de "flood fill")
+        let head = 0;
+        while(head < poweredQueue.length) {
+            const currentPowered = poweredQueue[head++];
+            const radius = currentPowered.userData.powerRadius || 0;
+
+            allPowerObjects.forEach(otherObj => {
+                if (!otherObj.userData.isPowered) { // Se o objeto ainda não tem energia
+                    const distance = currentPowered.position.distanceTo(otherObj.position);
+                    // Se o objeto está no raio do objeto energizado atual
+                    if (distance < radius) {
+                        otherObj.userData.isPowered = true;
+                        poweredQueue.push(otherObj); // Adiciona na fila para propagar a partir dele
+                    }
                 }
             });
-        });
+        }
         
+        // 4. Atualizar as cores dos consumidores com base no status final
         this.powerConsumers.forEach(c => {
-            if (c.userData.isPowered) {
-                if(c.userData.type === 'consumer' && c.material.color.getHexString() === '808080') {
-                    // Restaura a cor original
-                    if (this.powerConsumers.includes(c)) c.material.color.set(c.userData.originalColor || (this.buildMode === 'residential' ? 0x34A853 : 0x4285F4));
-                }
-            }
+            c.material.color.set(c.userData.isPowered ? c.userData.originalColor : 0x808080);
         });
     },
     
